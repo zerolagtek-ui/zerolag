@@ -6,11 +6,22 @@ export async function POST(request: Request) {
   try {
     const order: OrderDetails = await request.json();
 
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = Number(process.env.SMTP_PORT) || 587;
-    const smtpUser = process.env.SMTP_USER || 'zerolagtek@gmail.com';
-    const smtpPass = process.env.SMTP_PASS || '';
+    const host = process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com';
+    const port = Number(process.env.BREVO_SMTP_PORT) || 587;
+    const user = process.env.BREVO_SMTP_USER;
+    const pass = process.env.BREVO_SMTP_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || 'zerolagtek@gmail.com';
+    const senderName = process.env.BREVO_SENDER_NAME || 'ZeroLag Tek Store';
     const adminEmail = process.env.ADMIN_EMAIL || 'zerolagtek@gmail.com';
+
+    // Verify Brevo SMTP configuration
+    if (!user || !pass || pass === 'your_brevo_smtp_master_key_or_api_key' || user === 'your_brevo_login_email@domain.com') {
+      console.warn('[Brevo SMTP Warning] Brevo SMTP credentials are not configured. Email dispatch skipped.');
+      return NextResponse.json(
+        { success: false, message: 'Brevo email credentials missing' },
+        { status: 500 }
+      );
+    }
 
     const itemsListHtml = order.items.map(item => `
       <tr>
@@ -82,45 +93,38 @@ export async function POST(request: Request) {
       </div>
     `;
 
-    if (smtpPass && smtpPass !== 'your_email_app_password') {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass
-        }
-      });
-
-      // Dispatch Customer Email
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"ZeroLag Tek" <${smtpUser}>`,
-        to: order.email,
-        subject: `ZeroLag Tek Store Order Receipt #${order.id}`,
-        html: customerEmailHtml
-      });
-
-      // Dispatch Admin Notification Email
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"ZeroLag Tek" <${smtpUser}>`,
-        to: adminEmail,
-        subject: `🚨 New Order Alert #${order.id} - ${order.customerName}`,
-        html: adminEmailHtml
-      });
-
-      return NextResponse.json({ success: true, message: 'Emails dispatched successfully' });
-    }
-
-    console.log(`[Email Dispatch Log] Order #${order.id} for ${order.email} (SMTP unconfigured mock mode)`);
-    return NextResponse.json({
-      success: true,
-      notice: 'Order recorded. SMTP transport pending active passkey configuration.'
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: false, // Port 587 uses STARTTLS
+      auth: {
+        user,
+        pass,
+      },
     });
 
+    const fromAddress = `"${senderName}" <${senderEmail}>`;
+
+    // Dispatch Customer Receipt
+    await transporter.sendMail({
+      from: fromAddress,
+      to: order.email,
+      subject: `ZeroLag Tek Store Order Receipt #${order.id}`,
+      html: customerEmailHtml,
+    });
+
+    // Dispatch Admin Notification Alert
+    await transporter.sendMail({
+      from: fromAddress,
+      to: adminEmail,
+      subject: `🚨 New Order Alert #${order.id} - ${order.customerName}`,
+      html: adminEmailHtml,
+    });
+
+    return NextResponse.json({ success: true, message: 'Emails dispatched successfully via Brevo SMTP' });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to dispatch email';
-    console.error('Send Order Email Error:', message);
+    const message = error instanceof Error ? error.message : 'Failed to dispatch email via Brevo';
+    console.error('[Brevo Email Dispatch Error]:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
