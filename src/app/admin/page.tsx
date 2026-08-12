@@ -57,6 +57,8 @@ import {
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [adminUsername, setAdminUsername] = useState<string>('');
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
@@ -136,10 +138,25 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    const savedAuth = sessionStorage.getItem('zerolag_admin_auth');
-    if (savedAuth === 'true') {
-      setIsAuthenticated(true);
-    }
+    const checkSession = async () => {
+      try {
+        const res = await fetch('/api/admin/verify');
+        const data = await res.json();
+        if (res.ok && data.authenticated) {
+          setIsAuthenticated(true);
+          sessionStorage.setItem('zerolag_admin_auth', 'true');
+        } else {
+          setIsAuthenticated(false);
+          sessionStorage.removeItem('zerolag_admin_auth');
+        }
+      } catch {
+        setIsAuthenticated(false);
+        sessionStorage.removeItem('zerolag_admin_auth');
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+    checkSession();
   }, []);
 
   const refreshData = () => {
@@ -168,29 +185,46 @@ export default function AdminPage() {
     }
   }, [isAuthenticated]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const envEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL || 'zerolagtek@gmail.com';
-    const envPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || 'admin123';
+    setAuthError('');
+    setIsLoggingIn(true);
 
-    const inputEmail = adminUsername.trim().toLowerCase();
-    const validEmail = inputEmail === envEmail.toLowerCase() || inputEmail === 'admin' || inputEmail === 'admin@zerolag.lk';
-    const validPassword = adminPassword === envPassword || adminPassword === 'admin123' || adminPassword === 'zerolag2026';
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: adminUsername,
+          password: adminPassword
+        })
+      });
 
-    if (validEmail && validPassword) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('zerolag_admin_auth', 'true');
-      setAuthError('');
-    } else if (!validEmail) {
-      setAuthError(`Invalid admin email/username. Expected: zerolagtek@gmail.com`);
-    } else {
-      setAuthError('Incorrect admin passcode attempt.');
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setIsAuthenticated(true);
+        sessionStorage.setItem('zerolag_admin_auth', 'true');
+        setAuthError('');
+      } else {
+        setAuthError(data.error || 'Authentication failed. Please check your credentials.');
+      }
+    } catch {
+      setAuthError('Unable to connect to authentication server.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    sessionStorage.removeItem('zerolag_admin_auth');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setIsAuthenticated(false);
+      sessionStorage.removeItem('zerolag_admin_auth');
+    }
   };
 
   // Cloudinary Upload Handler (Shared)
@@ -444,6 +478,17 @@ export default function AdminPage() {
   const pendingOrdersCount = orders.filter(o => o.orderStatus === 'Pending').length;
   const inStockProductsCount = products.filter(p => p.inStock).length;
 
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
+          <p className="text-xs font-mono text-zinc-400 tracking-wider">Verifying Admin Session...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
@@ -498,9 +543,17 @@ export default function AdminPage() {
 
             <button
               type="submit"
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm hover:scale-[1.01] transition-transform shadow-lg shadow-lime-400/20"
+              disabled={isLoggingIn}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm hover:scale-[1.01] transition-transform shadow-lg shadow-lime-400/20 disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              Sign In to Dashboard
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Verifying Credentials...</span>
+                </>
+              ) : (
+                <span>Sign In to Dashboard</span>
+              )}
             </button>
           </form>
 

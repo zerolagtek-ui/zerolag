@@ -23,12 +23,14 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   };
 
   useEffect(() => {
-    try {
-      const auth = sessionStorage.getItem('zerolag_admin_auth');
-      setIsAdminLoggedIn(auth === 'true');
-    } catch {
-      setIsAdminLoggedIn(false);
-    }
+    fetch('/api/admin/verify')
+      .then(res => res.json())
+      .then(data => {
+        setIsAdminLoggedIn(!!data.authenticated);
+      })
+      .catch(() => {
+        setIsAdminLoggedIn(false);
+      });
 
     syncCategories();
     window.addEventListener('zerolag-categories-updated', syncCategories);
