@@ -1,0 +1,230 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useCart } from '@/context/CartContext';
+import { Category } from '@/types';
+import { getDynamicCategories } from '@/lib/storeManager';
+import { ShoppingBag, Bot, Shield, Search, Menu, X, MessageSquare, UserCheck, LogIn } from 'lucide-react';
+
+export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selectedCategory }: {
+  onSearchChange?: (q: string) => void;
+  searchQuery?: string;
+  onSelectCategory?: (catId: string) => void;
+  selectedCategory?: string;
+}) {
+  const { itemCount, setIsCartOpen, setIsAiOpen } = useCart();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  const syncCategories = () => {
+    setCategories(getDynamicCategories());
+  };
+
+  useEffect(() => {
+    try {
+      const auth = sessionStorage.getItem('zerolag_admin_auth');
+      setIsAdminLoggedIn(auth === 'true');
+    } catch {
+      setIsAdminLoggedIn(false);
+    }
+
+    syncCategories();
+    window.addEventListener('zerolag-categories-updated', syncCategories);
+    return () => {
+      window.removeEventListener('zerolag-categories-updated', syncCategories);
+    };
+  }, []);
+
+  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('Hello ZeroLag Tek! I would like to place an order.')}`;
+
+  return (
+    <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-black/90 text-white border-b border-zinc-800 transition-colors shadow-sm">
+      
+      {/* Top Banner Notice & Direct WhatsApp CTA */}
+      <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-xs font-bold py-1.5 px-4 text-slate-950 tracking-wider flex items-center justify-between">
+        <div className="hidden md:flex items-center gap-2 mx-auto uppercase">
+          <Shield className="w-3.5 h-3.5 fill-current" />
+          <span>ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
+          <Shield className="w-3.5 h-3.5 fill-current" />
+        </div>
+
+        {/* WhatsApp Direct Header Link */}
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mx-auto md:mx-0 flex items-center gap-1.5 bg-slate-950 text-lime-400 px-3 py-0.5 rounded-full font-mono text-[11px] hover:bg-slate-900 border border-lime-400/40 transition-all font-bold"
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-lime-400 fill-lime-400/20" />
+          <span>Order Now via WhatsApp: +{whatsappNumber}</span>
+        </a>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-20">
+
+          {/* Authentic ZeroLag Tek Shield Logo */}
+          <Link href="/" className="flex items-center gap-3 group shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5 shadow-lg shadow-lime-400/30 group-hover:shadow-lime-400/50 transition-all duration-300">
+              <div className="w-full h-full bg-[#090a0f] rounded-[10px] flex items-center justify-center">
+                <Shield className="w-6 h-6 text-lime-400 fill-lime-400/20 group-hover:scale-110 transition-transform" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-2xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white via-lime-200 to-lime-400">
+                  ZeroLag
+                </span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-lime-400/20 text-lime-400 border border-lime-500/30 font-mono font-bold">
+                  TEK
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase">
+                Zero Latency Store
+              </p>
+            </div>
+          </Link>
+
+          {/* Search Bar - Desktop */}
+          <div className="hidden md:flex flex-1 max-w-md mx-6 relative">
+            <input
+              type="text"
+              placeholder="Search mice, mechanical keyboards, routers..."
+              value={searchQuery || ''}
+              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700/80 rounded-full py-2.5 pl-11 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 focus:ring-1 focus:ring-lime-400/50 transition-all font-mono"
+            />
+            <Search className="w-4 h-4 text-lime-400 absolute left-4 top-3.5" />
+          </div>
+
+          {/* Action Tools */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            
+            {/* AI Assistant Button */}
+            <button
+              onClick={() => setIsAiOpen(true)}
+              className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-semibold tracking-wide transition-all group"
+            >
+              <div className="w-2 h-2 rounded-full bg-lime-400 animate-ping absolute -top-1 -right-1" />
+              <Bot className="w-5 h-5 text-lime-400 group-hover:rotate-12 transition-transform" />
+              <span className="hidden lg:inline">TekBot AI</span>
+            </button>
+
+            {/* Admin Login / Dashboard Cyber Button */}
+            <Link
+              href="/admin"
+              className={`hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-semibold font-mono transition-all relative ${
+                isAdminLoggedIn
+                  ? 'bg-lime-400/10 border-lime-400/50 text-lime-400 hover:bg-lime-400/20'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-lime-400'
+              }`}
+              title={isAdminLoggedIn ? "Admin Dashboard Active" : "Admin Login Portal"}
+            >
+              {isAdminLoggedIn ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse" />
+                  <UserCheck className="w-4 h-4 text-lime-400" />
+                  <span>Dashboard</span>
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4 text-lime-400" />
+                  <span>Sign In</span>
+                </>
+              )}
+            </Link>
+
+            {/* Shopping Cart Button */}
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-all"
+              aria-label="Shopping Cart"
+            >
+              <ShoppingBag className="w-6 h-6" />
+              {itemCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs w-5 h-5 rounded-full flex items-center justify-center shadow-lg shadow-lime-400/50 animate-bounce">
+                  {itemCount}
+                </span>
+              )}
+            </button>
+
+            {/* Mobile Hamburger Menu button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic Category Shortcuts Sub-Nav */}
+        <div className="hidden lg:flex items-center gap-2 py-2 overflow-x-auto bg-[#07080b]/95 border-t border-b border-zinc-800/80 text-xs font-mono scrollbar-none px-2 rounded-xl mb-1">
+          <span className="text-zinc-400 text-[11px] mr-2">Categories:</span>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => onSelectCategory && onSelectCategory(cat.id)}
+              className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition-colors ${
+                selectedCategory === cat.id
+                  ? 'bg-lime-400 text-slate-950 font-bold'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
+      </div>
+
+      {/* Mobile Menu Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-zinc-950 border-b border-zinc-800 px-4 pt-3 pb-6 space-y-4">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery || ''}
+              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 font-mono"
+            />
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-[11px] font-mono text-lime-400 uppercase font-bold">Categories</p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    if (onSelectCategory) onSelectCategory(cat.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-left text-xs p-2 rounded-lg bg-zinc-900 text-zinc-300 hover:text-white truncate"
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-700 text-xs font-mono"
+            >
+              <LogIn className="w-4 h-4 text-lime-400" />
+              <span>{isAdminLoggedIn ? 'Dashboard' : 'Sign In'}</span>
+            </Link>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+}
