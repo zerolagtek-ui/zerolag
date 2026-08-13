@@ -1,13 +1,32 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Shield, Truck, CreditCard, Clock, Phone, Mail, Award } from 'lucide-react';
 import { CATEGORIES } from '@/lib/productsData';
+import { syncSiteLogoFromSupabase } from '@/lib/storeManager';
 
 export function Footer() {
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
+  const [siteLogo, setSiteLogo] = useState<string>('');
+  const [logoError, setLogoError] = useState<boolean>(false);
+
+  const loadLogo = async () => {
+    const logo = await syncSiteLogoFromSupabase();
+    setSiteLogo(logo);
+    setLogoError(false);
+  };
+
+  useEffect(() => {
+    loadLogo();
+    window.addEventListener('zerolag-logo-updated', loadLogo);
+    window.addEventListener('site_logo_updated', loadLogo);
+    return () => {
+      window.removeEventListener('zerolag-logo-updated', loadLogo);
+      window.removeEventListener('site_logo_updated', loadLogo);
+    };
+  }, []);
 
   return (
     <footer className="bg-[#050608] border-t border-zinc-800 text-zinc-400 transition-colors">
@@ -60,11 +79,22 @@ export function Footer() {
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5">
-                <div className="w-full h-full bg-zinc-950 rounded-[8px] flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-lime-400" />
+              {siteLogo && !logoError ? (
+                <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
+                  <img
+                    src={siteLogo}
+                    alt="ZeroLag Tek Logo"
+                    className="w-full h-full object-contain"
+                    onError={() => setLogoError(true)}
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5">
+                  <div className="w-full h-full bg-zinc-950 rounded-[8px] flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-lime-400" />
+                  </div>
+                </div>
+              )}
               <span className="font-extrabold text-2xl text-white tracking-wider">ZeroLag Tek</span>
             </div>
 

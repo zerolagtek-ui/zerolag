@@ -25,7 +25,11 @@ import {
   getDynamicCategories,
   addCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  getStoredSiteLogo,
+  saveSiteLogo,
+  syncSiteLogoFromSupabase,
+  cleanLogoUrl
 } from '@/lib/storeManager';
 import {
   Lock,
@@ -189,17 +193,19 @@ export default function AdminPage() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'reviews' | 'slides' | 'categories' | 'bank'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'reviews' | 'slides' | 'categories' | 'bank' | 'branding'>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
   const [slides, setSlides] = useState<HeroSlide[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [bankConfig, setBankConfig] = useState<BankAccountDetails>(getStoredBankDetails());
+  const [siteLogoInput, setSiteLogoInput] = useState<string>('');
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [bankSavedNotice, setBankSavedNotice] = useState<boolean>(false);
+  const [logoNotice, setLogoNotice] = useState<boolean>(false);
 
   // CSV Import State & Ref
   const [isImportingCSV, setIsImportingCSV] = useState<boolean>(false);
@@ -383,9 +389,16 @@ export default function AdminPage() {
     setSlides(fetched);
   };
 
+  const fetchLogo = async () => {
+    const logo = await syncSiteLogoFromSupabase();
+    const tempLogo = typeof window !== 'undefined' ? localStorage.getItem('temp_uploaded_logo') : '';
+    setSiteLogoInput(logo || tempLogo || '');
+  };
+
   const refreshData = async () => {
     fetchProducts();
     await fetchSlides();
+    await fetchLogo();
     setOrders(getStoredOrders());
     setCategories(getDynamicCategories());
     setBankConfig(getStoredBankDetails());
@@ -453,7 +466,8 @@ export default function AdminPage() {
   };
 
   // Cloudinary Upload Handler (Shared)
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'product' | 'slide') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'product' | 'slide' | 'logo') => {
+    if (e) e.preventDefault();
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -477,11 +491,16 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (res.ok && data.url && data.url.startsWith('http')) {
-        // Save ONLY the hosted Cloudinary URL
+        const cleanedUrl = cleanLogoUrl(data.url);
         if (target === 'product') {
           setProductForm((prev) => ({ ...prev, image: data.url }));
-        } else {
+        } else if (target === 'slide') {
           setSlideForm((prev) => ({ ...prev, customImageUrl: data.url }));
+        } else if (target === 'logo') {
+          setSiteLogoInput(cleanedUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('temp_uploaded_logo', cleanedUrl);
+          }
         }
       } else {
         throw new Error(data.error || 'Failed to obtain hosted Cloudinary URL.');
@@ -870,6 +889,18 @@ export default function AdminPage() {
     setTimeout(() => setBankSavedNotice(false), 3000);
   };
 
+  const handleSaveSiteLogo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = cleanLogoUrl(siteLogoInput);
+    setSiteLogoInput(cleaned);
+    saveSiteLogo(cleaned);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('temp_uploaded_logo', cleaned);
+    }
+    setLogoNotice(true);
+    setTimeout(() => setLogoNotice(false), 3000);
+  };
+
   const filteredProducts = products.filter(p => {
     if (selectedCategoryFilter !== 'all' && p.category !== selectedCategoryFilter) return false;
     if (searchQuery) {
@@ -1138,6 +1169,18 @@ export default function AdminPage() {
             >
               <Building2 className="w-4 h-4" />
               <span>Bank Config</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('branding')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
+                activeTab === 'branding'
+                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
+                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>Logo & Branding</span>
             </button>
           </div>
 
@@ -1713,6 +1756,75 @@ export default function AdminPage() {
               >
                 <Save className="w-4 h-4" />
                 <span>Save Bank Configuration</span>
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'branding' && (
+          <div className="space-y-6 max-w-2xl bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
+              <div className="p-3 rounded-2xl bg-lime-400/10 border border-lime-400/30 text-lime-400">
+                <ImageIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-white text-lg">Site Logo & Branding</h2>
+                <p className="text-xs text-zinc-400 font-mono">Upload or link a custom site logo to sync across the Navbar and Footer.</p>
+              </div>
+            </div>
+
+            {logoNotice && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0" />
+                <span>Site logo updated and synced successfully across Navbar and Footer!</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSiteLogo} className="space-y-4 font-mono text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1 font-bold">Logo Image URL or Google Drive Link</label>
+                <input
+                  type="text"
+                  value={siteLogoInput}
+                  onChange={(e) => setSiteLogoInput(e.target.value)}
+                  placeholder="https://res.cloudinary.com/... or https://drive.google.com/file/d/..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none focus:border-lime-400"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Google Drive links (`drive.google.com/file/d/...`) are automatically converted into direct-render image URLs.
+                </p>
+              </div>
+
+              {/* Cloudinary Image Upload for Logo */}
+              <div>
+                <label className="block text-zinc-400 mb-1 font-bold">Upload Logo Image</label>
+                <label className="flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-lime-400 text-zinc-300 hover:text-white cursor-pointer transition-colors">
+                  <Upload className="w-4 h-4 text-lime-400" />
+                  <span>Select Image File (PNG, SVG, WEBP, JPG)</span>
+                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'logo')} className="hidden" />
+                </label>
+              </div>
+
+              {/* Live Logo Preview */}
+              {siteLogoInput && (
+                <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                  <span className="text-[10px] text-zinc-400 uppercase font-bold block">Live Logo Preview</span>
+                  <div className="w-16 h-16 rounded-xl bg-zinc-900 border border-zinc-800 p-2 flex items-center justify-center overflow-hidden shadow-md">
+                    <img
+                      src={cleanLogoUrl(siteLogoInput)}
+                      alt="Logo Preview"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Site Logo</span>
               </button>
             </form>
           </div>

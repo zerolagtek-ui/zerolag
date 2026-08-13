@@ -7,6 +7,7 @@ const ORDERS_STORAGE_KEY = 'zerolag_orders_v2';
 const BANK_STORAGE_KEY = 'zerolag_bank_details_v2';
 const SLIDES_STORAGE_KEY = 'zerolag_hero_slides_v1';
 const CATEGORIES_STORAGE_KEY = 'zerolag_categories_v1';
+const LOGO_STORAGE_KEY = 'zerolag_site_logo_url_v1';
 
 export const DEFAULT_BANK_DETAILS: BankAccountDetails = {
   bankName: 'Commercial Bank of Ceylon',
@@ -505,4 +506,80 @@ export function deleteCategory(categoryId: string): Category[] {
   const updated = categories.filter(c => c.id !== categoryId);
   saveCategories(updated);
   return updated;
+}
+
+// Site Branding / Logo Store API
+export function cleanLogoUrl(url?: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.includes('drive.google.com')) {
+    const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  return trimmed;
+}
+
+export function getStoredSiteLogo(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(LOGO_STORAGE_KEY) || localStorage.getItem('site_logo_url') || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveSiteLogo(logoUrl: string): void {
+  if (typeof window === 'undefined') return;
+  const cleaned = cleanLogoUrl(logoUrl);
+  try {
+    localStorage.setItem(LOGO_STORAGE_KEY, cleaned);
+    localStorage.setItem('site_logo_url', cleaned);
+    window.dispatchEvent(new Event('zerolag-logo-updated'));
+    window.dispatchEvent(new Event('site_logo_updated'));
+  } catch (e) {
+    console.error('Error saving site logo to localStorage:', e);
+  }
+
+  if (isSupabaseConfigured()) {
+    (async () => {
+      try {
+        const { error } = await supabase.from('site_settings').upsert([{ key: 'site_logo_url', value: cleaned }]);
+        if (error) {
+          console.warn('[Supabase Warning] Failed to update site_settings table:', error.message);
+        }
+      } catch (err: unknown) {
+        console.warn('[Supabase Warning] Exception in site_settings upsert:', err);
+      }
+    })();
+  }
+}
+
+export async function syncSiteLogoFromSupabase(): Promise<string> {
+  try {
+    if (!isSupabaseConfigured()) return getStoredSiteLogo();
+
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'site_logo_url')
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      const cleaned = cleanLogoUrl(data.value);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LOGO_STORAGE_KEY, cleaned);
+        localStorage.setItem('site_logo_url', cleaned);
+        window.dispatchEvent(new Event('zerolag-logo-updated'));
+        window.dispatchEvent(new Event('site_logo_updated'));
+      }
+      return cleaned;
+    }
+  } catch (err) {
+    console.warn('[Site Logo Supabase Sync Warning]:', err);
+  }
+  return getStoredSiteLogo();
 }

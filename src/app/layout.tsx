@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   title: 'ZeroLag Tek | Premier Gaming Hardware & Peripherals Sri Lanka',
   description: 'Buy genuine gaming mice, mechanical keyboards, headsets, routers, webcams & chargers with PayHere, Payzy, and Cash on Delivery with islandwide fast delivery.',
   keywords: ['ZeroLag Tek Store', 'Gaming Mice Sri Lanka', 'Mechanical Keyboards Colombo', 'PayHere E-Commerce', 'Tech Store LK'],
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
   openGraph: {
     title: 'ZeroLag Tek | Premier Gaming Hardware & Peripherals',
     description: 'Islandwide Delivery • Genuine Products • PayHere & Payzy Gateway Approved',
