@@ -26,7 +26,7 @@ export const INITIAL_HERO_SLIDES: HeroSlide[] = [
     description: 'Engineered for esports champions. Experience instant response, rapid trigger optical switches, sub-1ms wireless tech, and 4K ultra precision.',
     primaryButtonText: 'EXPLORE CATALOG',
     primaryButtonLink: '#catalog',
-    featuredProductId: 'prod-1',
+    featuredProductId: '',
     isActive: true
   },
   {
@@ -37,7 +37,7 @@ export const INITIAL_HERO_SLIDES: HeroSlide[] = [
     description: 'Custom hall-effect switches with 0.1mm actuation sensitivity, magnetic switches, and ultra-fast 8000Hz polling rate.',
     primaryButtonText: 'SHOP KEYBOARDS',
     primaryButtonLink: '#catalog',
-    featuredProductId: 'prod-4',
+    featuredProductId: '',
     isActive: true
   },
   {
@@ -48,73 +48,113 @@ export const INITIAL_HERO_SLIDES: HeroSlide[] = [
     description: 'Multi-Gigabit tri-band routers designed to eliminate ping spikes and optimize online competitive gaming connections.',
     primaryButtonText: 'VIEW NETWORKING',
     primaryButtonLink: '#catalog',
-    featuredProductId: 'prod-7',
+    featuredProductId: '',
     isActive: true
   }
 ];
 
-export const INITIAL_ORDERS: OrderDetails[] = [
-  {
-    id: 'ZLAG-982145',
-    customerName: 'Sahan Wickramasinghe',
-    email: 'sahan@gmail.com',
-    phone: '0778912345',
-    address: 'No 45, Duplication Road',
-    city: 'Colombo 03',
-    postalCode: '00300',
-    paymentMethod: 'payhere',
-    paymentStatus: 'Paid',
-    orderStatus: 'Processing',
-    items: [
-      {
-        product: INITIAL_PRODUCTS[0],
-        quantity: 1
-      }
-    ],
-    subtotalLkr: 58500,
-    discountLkr: 0,
-    shippingLkr: 0,
-    totalLkr: 58500,
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
-  },
-  {
-    id: 'ZLAG-847291',
-    customerName: 'Nimna Fernando',
-    email: 'nimna.f@yahoo.com',
-    phone: '0714567890',
-    address: '12/A, Kandy Road',
-    city: 'Kadawatha',
-    postalCode: '11830',
-    paymentMethod: 'bank-transfer',
-    paymentStatus: 'Pending',
-    orderStatus: 'Pending',
-    items: [
-      {
-        product: INITIAL_PRODUCTS[3],
-        quantity: 1
-      }
-    ],
-    subtotalLkr: 89000,
-    discountLkr: 0,
-    shippingLkr: 0,
-    totalLkr: 89000,
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString()
-  }
-];
+export const INITIAL_ORDERS: OrderDetails[] = [];
+
+// Supabase Column Formatting Helpers
+function formatSupabaseProduct(p: Product) {
+  return {
+    id: p.id,
+    name: p.name,
+    brand: p.brand,
+    category: p.category,
+    price: p.priceLkr,
+    original_price: p.originalPriceLkr || p.priceLkr,
+    image: p.image,
+    description: p.description,
+    features: p.tags || [],
+    specs: p.specs || {},
+    in_stock: p.inStock,
+    rating: p.rating || 5.0,
+    warranty: p.warranty || '1 Year Official Warranty'
+  };
+}
+
+function formatSupabaseOrder(o: OrderDetails) {
+  return {
+    id: o.id || `ZLAG-${Math.floor(100000 + Math.random() * 900000)}`,
+    customer_name: o.customerName,
+    customer_email: o.email,
+    customer_phone: o.phone,
+    shipping_address: `${o.address}, ${o.city}, ${o.postalCode}`,
+    payment_method: o.paymentMethod,
+    items: o.items,
+    subtotal: o.subtotalLkr,
+    shipping_fee: o.shippingLkr || 0,
+    total_amount: o.totalLkr,
+    status: o.orderStatus || 'Pending',
+    created_at: o.createdAt || new Date().toISOString()
+  };
+}
 
 // Product Store API
 export function getStoredProducts(): Product[] {
-  if (typeof window === 'undefined') return INITIAL_PRODUCTS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(INITIAL_PRODUCTS));
-      return INITIAL_PRODUCTS;
+      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
-    return JSON.parse(raw);
+    const parsed: Product[] = JSON.parse(raw);
+    const containsDemo = Array.isArray(parsed) && parsed.some(p =>
+      p.id === 'prod-1' || p.id === 'prod-2' || p.id === 'prod-3' ||
+      p.id === 'gpro-x-superlight-2' || p.id === 'wooting-60he' ||
+      p.id === 'dualsense-edge' || p.id === 'steelseries-arctis-nova-pro'
+    );
+    if (containsDemo) {
+      localStorage.removeItem(PRODUCTS_STORAGE_KEY);
+      return [];
+    }
+    return parsed;
   } catch {
-    return INITIAL_PRODUCTS;
+    return [];
   }
+}
+
+export async function syncProductsFromSupabase(): Promise<Product[]> {
+  if (!isSupabaseConfigured()) return getStoredProducts();
+
+  try {
+    const { data, error } = await supabase.from('products').select('*');
+    if (error) {
+      console.warn('[Supabase Sync Warning]:', error.message);
+      return getStoredProducts();
+    }
+
+    if (data) {
+      const formatted: Product[] = data.map((item: any) => ({
+        id: item.id,
+        name: item.name || item.title || 'Untitled Hardware',
+        brand: item.brand || 'ZeroLag',
+        category: item.category || 'all',
+        priceLkr: Number(item.price) || 0,
+        priceUsd: Number(item.price_usd) || Math.round((Number(item.price) || 0) / 300),
+        originalPriceLkr: Number(item.original_price || item.originalPrice) || Number(item.price) || undefined,
+        rating: Number(item.rating) || 0,
+        reviewsCount: Number(item.reviews_count) || 0,
+        image: item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
+        specs: item.specs || {},
+        description: item.description || '',
+        tags: item.features || item.tags || [item.brand || 'ZeroLag', item.category || 'all'],
+        inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : true,
+        stockCount: Number(item.stock || item.stock_count) || 10,
+        featured: item.featured ?? false,
+        badge: item.badge || undefined,
+        warranty: item.warranty_period || item.warranty || '1 Year Official Warranty'
+      }));
+
+      saveProducts(formatted);
+      return formatted;
+    }
+  } catch (err) {
+    console.warn('[Supabase Sync Error]:', err);
+  }
+  return getStoredProducts();
 }
 
 export function saveProducts(products: Product[]): void {
@@ -133,8 +173,9 @@ export function addStoredProduct(product: Product): Product[] {
   saveProducts(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('products').insert([product]).then(({ error }) => {
-      if (error) console.warn('Supabase insert product warning:', error);
+    const supabasePayload = formatSupabaseProduct(product);
+    supabase.from('products').upsert([supabasePayload]).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to insert product:', error.message, error.details);
     });
   }
 
@@ -147,8 +188,9 @@ export function updateStoredProduct(updatedProduct: Product): Product[] {
   saveProducts(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('products').update(updatedProduct).eq('id', updatedProduct.id).then(({ error }) => {
-      if (error) console.warn('Supabase update product warning:', error);
+    const supabasePayload = formatSupabaseProduct(updatedProduct);
+    supabase.from('products').update(supabasePayload).eq('id', updatedProduct.id).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to update product:', error.message, error.details);
     });
   }
 
@@ -162,7 +204,7 @@ export function deleteStoredProduct(productId: string): Product[] {
 
   if (isSupabaseConfigured()) {
     supabase.from('products').delete().eq('id', productId).then(({ error }) => {
-      if (error) console.warn('Supabase delete product warning:', error);
+      if (error) console.error('[Supabase Error] Failed to delete product:', error.message, error.details);
     });
   }
 
@@ -208,8 +250,9 @@ export function addStoredOrder(order: OrderDetails): OrderDetails[] {
   saveOrders(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('orders').insert([newOrder]).then(({ error }) => {
-      if (error) console.warn('Supabase insert order warning:', error);
+    const supabasePayload = formatSupabaseOrder(newOrder);
+    supabase.from('orders').upsert([supabasePayload]).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to insert order:', error.message, error.details);
     });
   }
 
@@ -231,8 +274,8 @@ export function updateOrderStatus(orderId: string, status: OrderDetails['orderSt
   saveOrders(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('orders').update({ orderStatus: status }).eq('id', orderId).then(({ error }) => {
-      if (error) console.warn('Supabase update order status warning:', error);
+    supabase.from('orders').update({ status: status }).eq('id', orderId).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to update order status:', error.message, error.details);
     });
   }
 
@@ -265,6 +308,20 @@ export function saveBankDetails(details: BankAccountDetails): void {
 }
 
 // Hero Slides Store API
+export function formatSlideImageUrl(url?: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.includes('drive.google.com')) {
+    const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  return trimmed;
+}
+
 export function getHeroSlides(): HeroSlide[] {
   if (typeof window === 'undefined') return INITIAL_HERO_SLIDES;
   try {
@@ -273,10 +330,55 @@ export function getHeroSlides(): HeroSlide[] {
       localStorage.setItem(SLIDES_STORAGE_KEY, JSON.stringify(INITIAL_HERO_SLIDES));
       return INITIAL_HERO_SLIDES;
     }
-    return JSON.parse(raw);
+    const parsed: HeroSlide[] = JSON.parse(raw);
+    return parsed.map(s => ({
+      ...s,
+      customImageUrl: formatSlideImageUrl(s.customImageUrl)
+    }));
   } catch {
     return INITIAL_HERO_SLIDES;
   }
+}
+
+export async function syncHeroSlidesFromSupabase(): Promise<HeroSlide[]> {
+  try {
+    if (!isSupabaseConfigured()) {
+      return getHeroSlides();
+    }
+
+    const { data, error } = await supabase.from('hero_slides').select('*');
+    if (!error && data && data.length > 0) {
+      const formatted: HeroSlide[] = data.map((item: any) => {
+        const fullTitle = item.title || item.name || `${item.titleFirstLine || ''} ${item.titleHighlight || ''}`.trim() || 'ZERO LAG HARDWARE';
+        const titleParts = fullTitle.split(' ');
+        const firstLine = titleParts.slice(0, Math.max(1, titleParts.length - 1)).join(' ');
+        const highlight = titleParts.length > 1 ? titleParts[titleParts.length - 1] : '';
+
+        return {
+          id: String(item.id),
+          badgeText: item.badge || item.badgeText || 'FLAGSHIP',
+          badge: item.badge || item.badgeText || 'FLAGSHIP',
+          titleFirstLine: item.titleFirstLine || firstLine,
+          titleHighlight: item.titleHighlight || highlight,
+          title: fullTitle,
+          description: item.description || item.subtitle || '',
+          subtitle: item.subtitle || item.description || '',
+          primaryButtonText: item.primary_button_text || item.primaryButtonText || 'EXPLORE CATALOG',
+          primaryButtonLink: item.primary_button_link || item.primaryButtonLink || '#catalog',
+          featuredProductId: item.featured_product_id || item.featuredProductId || '',
+          customImageUrl: formatSlideImageUrl(item.custom_image_url || item.customImageUrl || item.image || item.image_url),
+          isActive: item.is_active !== undefined ? Boolean(item.is_active) : (item.isActive ?? true)
+        };
+      });
+
+      saveHeroSlides(formatted);
+      return formatted;
+    }
+  } catch (err) {
+    console.warn('[Hero Slides Supabase Sync Error]:', err);
+  }
+
+  return getHeroSlides();
 }
 
 export function saveHeroSlides(slides: HeroSlide[]): void {
@@ -291,15 +393,57 @@ export function saveHeroSlides(slides: HeroSlide[]): void {
 
 export function addHeroSlide(slide: HeroSlide): HeroSlide[] {
   const slides = getHeroSlides();
-  const updated = [slide, ...slides];
+  const formattedSlide: HeroSlide = {
+    ...slide,
+    customImageUrl: formatSlideImageUrl(slide.customImageUrl)
+  };
+  const updated = [formattedSlide, ...slides];
   saveHeroSlides(updated);
+
+  if (isSupabaseConfigured()) {
+    supabase.from('hero_slides').upsert([{
+      id: formattedSlide.id,
+      title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
+      subtitle: formattedSlide.description || formattedSlide.subtitle || '',
+      badge: formattedSlide.badgeText || formattedSlide.badge || '',
+      primary_button_text: formattedSlide.primaryButtonText,
+      primary_button_link: formattedSlide.primaryButtonLink,
+      featured_product_id: formattedSlide.featuredProductId,
+      custom_image_url: formattedSlide.customImageUrl,
+      is_active: formattedSlide.isActive ?? true
+    }]).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to insert hero slide:', error.message);
+    });
+  }
+
   return updated;
 }
 
 export function updateHeroSlide(slide: HeroSlide): HeroSlide[] {
   const slides = getHeroSlides();
-  const updated = slides.map(s => (s.id === slide.id ? slide : s));
+  const formattedSlide: HeroSlide = {
+    ...slide,
+    customImageUrl: formatSlideImageUrl(slide.customImageUrl)
+  };
+  const updated = slides.map(s => (s.id === slide.id ? formattedSlide : s));
   saveHeroSlides(updated);
+
+  if (isSupabaseConfigured()) {
+    supabase.from('hero_slides').upsert([{
+      id: formattedSlide.id,
+      title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
+      subtitle: formattedSlide.description || formattedSlide.subtitle || '',
+      badge: formattedSlide.badgeText || formattedSlide.badge || '',
+      primary_button_text: formattedSlide.primaryButtonText,
+      primary_button_link: formattedSlide.primaryButtonLink,
+      featured_product_id: formattedSlide.featuredProductId,
+      custom_image_url: formattedSlide.customImageUrl,
+      is_active: formattedSlide.isActive ?? true
+    }]).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to update hero slide:', error.message);
+    });
+  }
+
   return updated;
 }
 
@@ -307,6 +451,13 @@ export function deleteHeroSlide(slideId: string): HeroSlide[] {
   const slides = getHeroSlides();
   const updated = slides.filter(s => s.id !== slideId);
   saveHeroSlides(updated);
+
+  if (isSupabaseConfigured()) {
+    supabase.from('hero_slides').delete().eq('id', slideId).then(({ error }) => {
+      if (error) console.error('[Supabase Error] Failed to delete hero slide:', error.message);
+    });
+  }
+
   return updated;
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { HeroBanner } from '@/components/HeroBanner';
 import { ProductGrid } from '@/components/ProductGrid';
@@ -8,14 +8,33 @@ import { CartDrawer } from '@/components/CartDrawer';
 import { PayHereCheckoutModal } from '@/components/PayHereCheckoutModal';
 import { AiAssistantDrawer } from '@/components/AiAssistantDrawer';
 import { Footer } from '@/components/Footer';
+import { getProductsFromSupabase } from '@/lib/productsData';
+import { syncHeroSlidesFromSupabase } from '@/lib/storeManager';
+import { Product } from '@/types';
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        await syncHeroSlidesFromSupabase();
+        const fetched = await getProductsFromSupabase();
+        if (fetched && fetched.length > 0) {
+          setProducts(fetched);
+        }
+      } catch (err) {
+        console.error('[Home Page] Failed to fetch data from Supabase:', err);
+      }
+    }
+    loadData();
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-black text-white">
+    <div className="min-h-screen flex flex-col justify-between bg-black text-white overflow-x-hidden">
       {/* Navigation Header */}
       <Navbar
         searchQuery={searchQuery}
@@ -33,6 +52,7 @@ export default function Home() {
           externalSearchQuery={searchQuery}
           externalCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
+          initialProducts={products}
         />
       </main>
 

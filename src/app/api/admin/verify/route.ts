@@ -18,7 +18,7 @@ export async function GET() {
 
     return NextResponse.json({
       authenticated: true,
-      user: { email: payload.email }
+      user: { email: payload.email, role: payload.role || 'super_admin' }
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Verification error';
@@ -26,3 +26,4 @@ export async function GET() {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 }
+

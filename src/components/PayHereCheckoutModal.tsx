@@ -84,16 +84,31 @@ export function PayHereCheckoutModal({ isOpen, onClose }: { isOpen: boolean; onC
 
     addStoredOrder(newOrderPayload);
 
-    // Dispatch Email Receipt & Admin Notification API Call
-    try {
-      fetch('/api/send-order-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newOrderPayload)
-      }).catch(err => console.error('Order Email Trigger error:', err));
-    } catch (err) {
-      console.error('Email API call error:', err);
-    }
+    // Asynchronous background email dispatch (non-blocking)
+    const emailPayload = {
+      orderId: generatedOrderId,
+      customerName: formData.customerName,
+      customerEmail: formData.email,
+      customerPhone: formData.phone,
+      shippingAddress: `${formData.address}, ${formData.city}, ${formData.postalCode}`,
+      paymentMethod: formData.paymentMethod,
+      items: cart.map(item => ({
+        name: item.product.name,
+        quantity: item.quantity,
+        price: item.product.priceLkr,
+        total: item.product.priceLkr * item.quantity
+      })),
+      subtotal: totalPriceLkr + discountAmountLkr,
+      shippingFee: 0,
+      totalAmount: totalPriceLkr,
+      orderDate: new Date().toISOString()
+    };
+
+    fetch('/api/send-order-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPayload)
+    }).catch(err => console.error('Background email dispatch failed:', err));
 
     setTimeout(() => {
       setIsSubmitting(false);

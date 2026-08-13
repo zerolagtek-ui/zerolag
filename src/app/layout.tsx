@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { CartProvider } from '@/context/CartContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { ScrollToTop } from '@/components/ScrollToTop';
 
 export const metadata: Metadata = {
   title: 'ZeroLag Tek | Premier Gaming Hardware & Peripherals Sri Lanka',
@@ -25,6 +26,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange enableSystem={false}>
           <CartProvider>
             {children}
+            <ScrollToTop />
           </CartProvider>
         </ThemeProvider>
       </body>

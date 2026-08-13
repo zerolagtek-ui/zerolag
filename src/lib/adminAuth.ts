@@ -7,15 +7,28 @@ const SECRET_KEY =
 
 export interface AdminSessionPayload {
   email: string;
+  role: string;
+  iat: number; // Unix timestamp in seconds
   exp: number; // Unix timestamp in seconds
+}
+
+/**
+ * Performs side-channel timing attack safe comparison of two strings using SHA-256 hashing.
+ */
+export function timingSafeMatch(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const hashA = crypto.createHash('sha256').update(a).digest();
+  const hashB = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
 }
 
 /**
  * Creates an HMAC-signed session token for the admin.
  */
-export function createAdminToken(email: string): string {
-  const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24; // 24 hours validity
-  const payload: AdminSessionPayload = { email, exp };
+export function createAdminToken(email: string, role = 'super_admin'): string {
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + 60 * 60 * 24; // 24 hours validity
+  const payload: AdminSessionPayload = { email, role, iat: now, exp };
   const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
 
   const signature = crypto
@@ -57,6 +70,10 @@ export function verifyAdminToken(token: string): AdminSessionPayload | null {
     const payloadJson = Buffer.from(payloadBase64, 'base64url').toString('utf-8');
     const payload: AdminSessionPayload = JSON.parse(payloadJson);
 
+    if (!payload.email || !payload.exp || !payload.role) {
+      return null;
+    }
+
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp < now) {
       return null; // Expired token
@@ -67,3 +84,4 @@ export function verifyAdminToken(token: string): AdminSessionPayload | null {
     return null;
   }
 }
+

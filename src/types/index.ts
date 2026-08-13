@@ -46,6 +46,9 @@ export interface HeroSlide {
   featuredProductId: string;
   customImageUrl?: string;
   isActive: boolean;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
 }
 
 export interface ChatMessage {

@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Shield, Truck, CreditCard, Clock, MapPin, Phone, Mail, Award } from 'lucide-react';
+import { Shield, Truck, CreditCard, Clock, Phone, Mail, Award } from 'lucide-react';
 import { CATEGORIES } from '@/lib/productsData';
 
 export function Footer() {
@@ -74,10 +74,6 @@ export function Footer() {
 
             <div className="space-y-2 text-xs font-mono">
               <p className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-lime-400 shrink-0" />
-                <span>ZeroLag Tek Hardware Hub, Liberty Plaza, Colombo 03, LK</span>
-              </p>
-              <p className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-lime-400 shrink-0" />
                 <span>Hotline: +{whatsappNumber}</span>
               </p>
@@ -112,6 +108,9 @@ export function Footer() {
             <ul className="space-y-2 text-xs">
               <li><Link href="/" className="hover:text-white">Store Home</Link></li>
               <li><Link href="/#catalog" className="hover:text-white">All Products</Link></li>
+              <li><Link href="/return-policy" className="hover:text-lime-400 text-lime-400/90 font-medium">Return & Refund Policy</Link></li>
+              <li><Link href="/privacy-policy" className="hover:text-white">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="hover:text-white">Terms & Conditions</Link></li>
               <li><Link href="/admin" className="hover:text-white">Admin Portal Login</Link></li>
               <li><a href={`https://wa.me/${whatsappNumber}`} target="_blank" rel="noopener noreferrer" className="hover:text-white">WhatsApp Order Line</a></li>
             </ul>
@@ -141,13 +140,13 @@ export function Footer() {
 
         {/* Bottom Rights Strip */}
         <div className="mt-12 pt-6 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between text-xs font-mono gap-4">
-          <p>© {new Date().getFullYear()} ZeroLag Tek Store (Pvt) Ltd. All rights reserved.</p>
+          <p>© 2026 ZeroLag Tek Store. All rights reserved.</p>
           <div className="flex items-center gap-4 text-[11px] text-zinc-400">
-            <span>PayHere LK Approved</span>
+            <Link href="/return-policy" className="hover:text-lime-400 transition-colors">Return & Refund Policy</Link>
             <span>•</span>
-            <span>Payzy Mobile Wallet</span>
+            <Link href="/privacy-policy" className="hover:text-lime-400 transition-colors">Privacy Policy</Link>
             <span>•</span>
-            <span>Direct Bank Transfer</span>
+            <Link href="/terms" className="hover:text-lime-400 transition-colors">Terms & Conditions</Link>
           </div>
         </div>
 

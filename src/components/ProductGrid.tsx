@@ -3,15 +3,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProductCard } from './ProductCard';
 import { Product, Category } from '@/types';
-import { getStoredProducts, getDynamicCategories } from '@/lib/storeManager';
-import { Cpu, Search, SlidersHorizontal, Check, RefreshCw, Loader2, PackageCheck } from 'lucide-react';
+import { getStoredProducts, getDynamicCategories, syncProductsFromSupabase } from '@/lib/storeManager';
+import { getProductsFromSupabase } from '@/lib/productsData';
+import { Cpu, Search, SlidersHorizontal, Check, RefreshCw, Loader2, PackageCheck, PackageX } from 'lucide-react';
 
-export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCategory }: {
+export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCategory, initialProducts }: {
   externalSearchQuery?: string;
   externalCategory?: string;
   onSelectCategory?: (catId: string) => void;
+  initialProducts?: Product[];
 }) {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(initialProducts || []);
   const [categories, setCategories] = useState<Category[]>([]);
   
   // Filtering states
@@ -25,18 +27,49 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const observerRef = useRef<HTMLDivElement | null>(null);
 
-  const syncData = () => {
-    setProducts(getStoredProducts());
-    setCategories(getDynamicCategories());
-  };
+  useEffect(() => {
+    if (initialProducts && initialProducts.length > 0) {
+      setProducts(initialProducts);
+    }
+  }, [initialProducts]);
 
   useEffect(() => {
-    syncData();
-    window.addEventListener('zerolag-products-updated', syncData);
-    window.addEventListener('zerolag-categories-updated', syncData);
+    async function loadGridProducts() {
+      try {
+        const fetched = await getProductsFromSupabase();
+        if (fetched && fetched.length > 0) {
+          setProducts(fetched);
+        } else {
+          const stored = getStoredProducts();
+          if (stored && stored.length > 0) {
+            setProducts(stored);
+          }
+        }
+      } catch (err) {
+        console.error('[ProductGrid] Error loading products:', err);
+        const stored = getStoredProducts();
+        if (stored && stored.length > 0) {
+          setProducts(stored);
+        }
+      }
+      setCategories(getDynamicCategories());
+    }
+
+    loadGridProducts();
+
+    const handleUpdate = () => {
+      const stored = getStoredProducts();
+      if (stored && stored.length > 0) {
+        setProducts(stored);
+      }
+      setCategories(getDynamicCategories());
+    };
+
+    window.addEventListener('zerolag-products-updated', handleUpdate);
+    window.addEventListener('zerolag-categories-updated', handleUpdate);
     return () => {
-      window.removeEventListener('zerolag-products-updated', syncData);
-      window.removeEventListener('zerolag-categories-updated', syncData);
+      window.removeEventListener('zerolag-products-updated', handleUpdate);
+      window.removeEventListener('zerolag-categories-updated', handleUpdate);
     };
   }, []);
 
@@ -161,10 +194,10 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         </div>
 
         {/* Filter Controls Strip */}
-        <div className="p-4 rounded-2xl bg-[#0a0c10] border border-zinc-800 flex flex-wrap items-center justify-between gap-4 text-xs font-mono shadow-sm">
+        <div className="p-3 sm:p-4 rounded-2xl bg-[#0a0c10] border border-zinc-800 flex flex-col sm:flex-row flex-wrap items-center justify-between gap-3 sm:gap-4 text-xs font-mono shadow-sm">
           
           {/* Search Input */}
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
             <input
               type="text"
               placeholder="Search products by title or brand..."
@@ -175,25 +208,25 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
             <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex w-full sm:w-auto flex-wrap items-center gap-2 sm:gap-3 justify-between sm:justify-start">
             {/* In Stock Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-800 text-zinc-300">
+            <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer bg-zinc-950 px-2.5 sm:px-3 py-2 rounded-xl border border-zinc-800 text-zinc-300 text-[11px] sm:text-xs">
               <input
                 type="checkbox"
                 checked={inStockOnly}
                 onChange={(e) => setInStockOnly(e.target.checked)}
                 className="accent-lime-400"
               />
-              <span>In-Stock Items Only</span>
+              <span>In-Stock Only</span>
             </label>
 
             {/* Sort Select */}
-            <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-800">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-lime-400" />
+            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 sm:px-3 py-2 rounded-xl border border-zinc-800 text-[11px] sm:text-xs">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-lime-400 shrink-0" />
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-transparent text-xs text-zinc-200 focus:outline-none"
+                className="bg-transparent text-[11px] sm:text-xs text-zinc-200 focus:outline-none"
               >
                 <option value="featured">Featured Hardware</option>
                 <option value="price-asc">Price: Low to High</option>
@@ -207,27 +240,39 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
         {/* Main Product Cards Grid */}
         {visibleProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
             {visibleProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
         ) : (
           <div className="p-12 text-center bg-[#0a0c10] border border-zinc-800 rounded-3xl space-y-4">
-            <Cpu className="w-12 h-12 text-zinc-600 mx-auto" />
-            <h3 className="text-lg font-bold text-white">No products found matching criteria</h3>
-            <p className="text-xs text-zinc-400 font-mono">Try adjusting your category filters or search query.</p>
-            <button
-              onClick={() => {
-                setSelectedCategory('all');
-                setSearchQuery('');
-                setInStockOnly(false);
-              }}
-              className="px-4 py-2 rounded-xl bg-lime-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reset All Filters</span>
-            </button>
+            {products.length === 0 ? (
+              <>
+                <PackageX className="w-12 h-12 text-zinc-600 mx-auto" />
+                <h3 className="text-lg font-bold text-white">No Products Available</h3>
+                <p className="text-xs text-zinc-400 font-mono">
+                  The store catalog is currently empty. Check back soon for new inventory!
+                </p>
+              </>
+            ) : (
+              <>
+                <Cpu className="w-12 h-12 text-zinc-600 mx-auto" />
+                <h3 className="text-lg font-bold text-white">No products found matching criteria</h3>
+                <p className="text-xs text-zinc-400 font-mono">Try adjusting your category filters or search query.</p>
+                <button
+                  onClick={() => {
+                    setSelectedCategory('all');
+                    setSearchQuery('');
+                    setInStockOnly(false);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-lime-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset All Filters</span>
+                </button>
+              </>
+            )}
           </div>
         )}
 

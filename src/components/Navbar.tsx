@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { Category } from '@/types';
 import { getDynamicCategories } from '@/lib/storeManager';
-import { ShoppingBag, Bot, Shield, Search, Menu, X, MessageSquare, UserCheck, LogIn } from 'lucide-react';
+import { ShoppingBag, Bot, Shield, Search, Menu, X, MessageSquare, User, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
 
 export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selectedCategory }: {
   onSearchChange?: (q: string) => void;
@@ -15,6 +15,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
 }) {
   const { itemCount, setIsCartOpen, setIsAiOpen } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -22,7 +23,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     setCategories(getDynamicCategories());
   };
 
-  useEffect(() => {
+  const checkAdminAuth = () => {
     fetch('/api/admin/verify')
       .then(res => res.json())
       .then(data => {
@@ -31,11 +32,29 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
       .catch(() => {
         setIsAdminLoggedIn(false);
       });
+  };
 
+  const handleAdminSignOut = async () => {
+    setAdminDropdownOpen(false);
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch (e) {
+      console.warn('Logout error:', e);
+    }
+    sessionStorage.removeItem('zerolag_admin_auth');
+    setIsAdminLoggedIn(false);
+    window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
+  };
+
+  useEffect(() => {
+    checkAdminAuth();
     syncCategories();
+
     window.addEventListener('zerolag-categories-updated', syncCategories);
+    window.addEventListener('zerolag-admin-auth-changed', checkAdminAuth);
     return () => {
       window.removeEventListener('zerolag-categories-updated', syncCategories);
+      window.removeEventListener('zerolag-admin-auth-changed', checkAdminAuth);
     };
   }, []);
 
@@ -46,11 +65,11 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-black/90 text-white border-b border-zinc-800 transition-colors shadow-sm">
       
       {/* Top Banner Notice & Direct WhatsApp CTA */}
-      <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-xs font-bold py-1.5 px-4 text-slate-950 tracking-wider flex items-center justify-between">
-        <div className="hidden md:flex items-center gap-2 mx-auto uppercase">
-          <Shield className="w-3.5 h-3.5 fill-current" />
-          <span>ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
-          <Shield className="w-3.5 h-3.5 fill-current" />
+      <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-[10px] sm:text-xs font-bold py-1 px-2 sm:px-4 text-slate-950 tracking-wider flex items-center justify-between overflow-hidden">
+        <div className="hidden md:flex items-center gap-2 mx-auto uppercase truncate">
+          <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
+          <span className="truncate">ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
+          <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
         </div>
 
         {/* WhatsApp Direct Header Link */}
@@ -58,33 +77,33 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mx-auto md:mx-0 flex items-center gap-1.5 bg-slate-950 text-lime-400 px-3 py-0.5 rounded-full font-mono text-[11px] hover:bg-slate-900 border border-lime-400/40 transition-all font-bold"
+          className="mx-auto md:mx-0 flex items-center gap-1 sm:gap-1.5 bg-slate-950 text-lime-400 px-2.5 sm:px-3 py-0.5 rounded-full font-mono text-[10px] sm:text-[11px] hover:bg-slate-900 border border-lime-400/40 transition-all font-bold truncate"
         >
-          <MessageSquare className="w-3.5 h-3.5 text-lime-400 fill-lime-400/20" />
-          <span>Order Now via WhatsApp: +{whatsappNumber}</span>
+          <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-lime-400 fill-lime-400/20 shrink-0" />
+          <span className="truncate">WhatsApp Order: +{whatsappNumber}</span>
         </a>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20">
 
           {/* Authentic ZeroLag Tek Shield Logo */}
-          <Link href="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5 shadow-lg shadow-lime-400/30 group-hover:shadow-lime-400/50 transition-all duration-300">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 group shrink-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5 shadow-lg shadow-lime-400/30 group-hover:shadow-lime-400/50 transition-all duration-300">
               <div className="w-full h-full bg-[#090a0f] rounded-[10px] flex items-center justify-center">
-                <Shield className="w-6 h-6 text-lime-400 fill-lime-400/20 group-hover:scale-110 transition-transform" />
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-lime-400 fill-lime-400/20 group-hover:scale-110 transition-transform" />
               </div>
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-2xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white via-lime-200 to-lime-400">
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <span className="font-extrabold text-xl sm:text-2xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white via-lime-200 to-lime-400">
                   ZeroLag
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-lime-400/20 text-lime-400 border border-lime-500/30 font-mono font-bold">
+                <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-lime-400/20 text-lime-400 border border-lime-500/30 font-mono font-bold">
                   TEK
                 </span>
               </div>
-              <p className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase">
+              <p className="text-[9px] sm:text-[10px] text-zinc-400 font-mono tracking-widest uppercase hidden sm:block">
                 Zero Latency Store
               </p>
             </div>
@@ -115,29 +134,49 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
               <span className="hidden lg:inline">TekBot AI</span>
             </button>
 
-            {/* Admin Login / Dashboard Cyber Button */}
-            <Link
-              href="/admin"
-              className={`hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-semibold font-mono transition-all relative ${
-                isAdminLoggedIn
-                  ? 'bg-lime-400/10 border-lime-400/50 text-lime-400 hover:bg-lime-400/20'
-                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-lime-400'
-              }`}
-              title={isAdminLoggedIn ? "Admin Dashboard Active" : "Admin Login Portal"}
-            >
-              {isAdminLoggedIn ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse" />
-                  <UserCheck className="w-4 h-4 text-lime-400" />
-                  <span>Dashboard</span>
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-4 h-4 text-lime-400" />
-                  <span>Sign In</span>
-                </>
-              )}
-            </Link>
+            {/* Subtle Neutral Sign In Button / User Dropdown */}
+            {isAdminLoggedIn ? (
+              <div className="relative">
+                <button
+                  onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold font-mono text-white transition-all cursor-pointer"
+                >
+                  <User className="w-4 h-4 text-lime-400" />
+                  <span className="font-bold">Account</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                </button>
+
+                {adminDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-[#0a0c10] border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 font-mono text-xs space-y-1">
+                    <Link
+                      href="/admin"
+                      onClick={() => setAdminDropdownOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-lime-400/10 text-lime-400 font-bold transition-colors"
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      <span>Dashboard</span>
+                    </Link>
+
+                    <button
+                      onClick={handleAdminSignOut}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-red-500/10 text-red-400 text-left transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 hover:text-lime-400 font-bold text-xs font-mono transition-all"
+                title="Sign In"
+              >
+                <User className="w-4 h-4 text-lime-400" />
+                <span>Sign In</span>
+              </Link>
+            )}
 
             {/* Shopping Cart Button */}
             <button
@@ -217,11 +256,11 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
 
           <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
             <Link
-              href="/admin"
+              href={isAdminLoggedIn ? "/admin" : "/login"}
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-700 text-xs font-mono"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 text-zinc-200 border border-zinc-700 text-xs font-mono"
             >
-              <LogIn className="w-4 h-4 text-lime-400" />
+              <User className="w-4 h-4 text-lime-400" />
               <span>{isAdminLoggedIn ? 'Dashboard' : 'Sign In'}</span>
             </Link>
           </div>

@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
-import { formatPrice } from '@/lib/productsData';
+import { formatPrice, getProductSlug } from '@/lib/productsData';
 import { X, Trash2, ShoppingBag, ArrowRight, Tag, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () => void }) {
@@ -66,7 +66,7 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                   key={product.id}
                   className="flex gap-4 p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition-all"
                 >
-                  <Link href={`/product/${product.id}`} onClick={() => setIsCartOpen(false)}>
+                  <Link href={`/product/${getProductSlug(product)}`} onClick={() => setIsCartOpen(false)}>
                     <img
                       src={product.image}
                       alt={product.name}
@@ -76,7 +76,7 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                   <div className="flex-1 flex flex-col justify-between">
                     <div>
                       <Link
-                        href={`/product/${product.id}`}
+                        href={`/product/${getProductSlug(product)}`}
                         onClick={() => setIsCartOpen(false)}
                         className="font-bold text-xs text-white line-clamp-1 hover:text-lime-400 transition-colors"
                       >

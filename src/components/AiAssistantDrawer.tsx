@@ -5,7 +5,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { ChatMessage } from '@/types';
-import { formatPrice } from '@/lib/productsData';
+import { formatPrice, getProductSlug } from '@/lib/productsData';
 import { Bot, X, Send, Zap, ShoppingCart, Eye } from 'lucide-react';
 
 let msgCounter = 0;
@@ -177,7 +177,7 @@ export function AiAssistantDrawer() {
                             />
                             <div className="flex-1 min-w-0">
                               <Link
-                                href={`/product/${product.id}`}
+                                href={`/product/${getProductSlug(product)}`}
                                 onClick={() => setIsAiOpen(false)}
                                 className="font-bold text-[11px] text-white truncate block hover:text-lime-400"
                               >
@@ -189,7 +189,7 @@ export function AiAssistantDrawer() {
                             </div>
                             <div className="flex items-center gap-1">
                               <Link
-                                href={`/product/${product.id}`}
+                                href={`/product/${getProductSlug(product)}`}
                                 onClick={() => setIsAiOpen(false)}
                                 className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:text-lime-400"
                                 title="View Specs"

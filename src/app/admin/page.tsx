@@ -1,20 +1,24 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Product, OrderDetails, OrderStatus, BankAccountDetails, HeroSlide, Category } from '@/types';
-import { formatPrice } from '@/lib/productsData';
+import { formatPrice, getProductSlug } from '@/lib/productsData';
 import {
   getStoredProducts,
+  saveProducts,
   addStoredProduct,
   updateStoredProduct,
   deleteStoredProduct,
   getStoredOrders,
+  saveOrders,
   updateOrderStatus,
   getStoredBankDetails,
   saveBankDetails,
   getHeroSlides,
+  syncHeroSlidesFromSupabase,
   addHeroSlide,
   updateHeroSlide,
   deleteHeroSlide,
@@ -52,10 +56,132 @@ import {
   Layers,
   Eye,
   EyeOff,
-  Tag
+  Tag,
+  Star
 } from 'lucide-react';
 
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+
+interface AdminReview {
+  id: string;
+  product_id: string;
+  user_name: string;
+  user_email: string;
+  rating: number;
+  comment: string;
+  status: string;
+  created_at: string;
+}
+
+// CSV Parser Helper
+function parseCSV(text: string): Record<string, string>[] {
+  const lines: string[] = [];
+  let currentLine = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentLine += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      if (currentLine.trim()) {
+        lines.push(currentLine);
+      }
+      currentLine = '';
+    } else {
+      currentLine += char;
+    }
+  }
+  if (currentLine.trim()) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length === 0) return [];
+
+  const parseRow = (rowStr: string): string[] => {
+    const cells: string[] = [];
+    let cell = '';
+    let inside = false;
+
+    for (let i = 0; i < rowStr.length; i++) {
+      const c = rowStr[i];
+      const nc = rowStr[i + 1];
+
+      if (c === '"') {
+        if (inside && nc === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inside = !inside;
+        }
+      } else if (c === ',' && !inside) {
+        cells.push(cell.trim());
+        cell = '';
+      } else {
+        cell += c;
+      }
+    }
+    cells.push(cell.trim());
+    return cells;
+  };
+
+  const headers = parseRow(lines[0]).map(h => h.trim());
+  const results: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const rowValues = parseRow(lines[i]);
+    if (rowValues.length === 0 || (rowValues.length === 1 && !rowValues[0])) continue;
+
+    const rowObj: Record<string, string> = {};
+    headers.forEach((header, idx) => {
+      rowObj[header] = rowValues[idx] || '';
+    });
+    results.push(rowObj);
+  }
+
+  return results;
+}
+
+function findHeaderValue(row: Record<string, string>, possibleKeys: string[]): string {
+  const keys = Object.keys(row);
+  for (const pKey of possibleKeys) {
+    const match = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === pKey.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    if (match && row[match]) {
+      return row[match].trim();
+    }
+  }
+  return '';
+}
+
+function cleanImageUrl(rawUrl: string): string {
+  const fallback = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+  if (!rawUrl) return fallback;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return fallback;
+
+  // Google Drive link conversion (view, open?id=, uc?id=)
+  if (trimmed.includes('drive.google.com')) {
+    const driveMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+    }
+  }
+
+  return trimmed;
+}
+
 export default function AdminPage() {
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
@@ -63,16 +189,21 @@ export default function AdminPage() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'slides' | 'categories' | 'bank'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'reviews' | 'slides' | 'categories' | 'bank'>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
   const [slides, setSlides] = useState<HeroSlide[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [bankConfig, setBankConfig] = useState<BankAccountDetails>(getStoredBankDetails());
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [bankSavedNotice, setBankSavedNotice] = useState<boolean>(false);
+
+  // CSV Import State & Ref
+  const [isImportingCSV, setIsImportingCSV] = useState<boolean>(false);
+  const csvFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Cloudinary Image Upload State
   const [uploading, setUploading] = useState<boolean>(false);
@@ -122,7 +253,7 @@ export default function AdminPage() {
     description: 'Experience ultra performance with ZeroLag Tek hardware.',
     primaryButtonText: 'SHOP NOW',
     primaryButtonLink: '#catalog',
-    featuredProductId: 'prod-1',
+    featuredProductId: '',
     customImageUrl: '',
     isActive: true
   });
@@ -148,23 +279,117 @@ export default function AdminPage() {
         } else {
           setIsAuthenticated(false);
           sessionStorage.removeItem('zerolag_admin_auth');
+          router.push('/login');
         }
       } catch {
         setIsAuthenticated(false);
         sessionStorage.removeItem('zerolag_admin_auth');
+        router.push('/login');
       } finally {
         setIsCheckingAuth(false);
       }
     };
     checkSession();
-  }, []);
+  }, [router]);
 
-  const refreshData = () => {
+  const fetchReviews = async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setReviews(data as AdminReview[]);
+      }
+    } catch (e) {
+      console.warn('Error fetching reviews for admin:', e);
+    }
+  };
+
+  const handleUpdateReviewStatus = async (reviewId: string, newStatus: 'approved' | 'rejected') => {
+    try {
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase
+          .from('reviews')
+          .update({ status: newStatus })
+          .eq('id', reviewId);
+
+        if (error) throw error;
+      }
+      setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, status: newStatus } : r));
+    } catch (err) {
+      console.error('Failed to update review status:', err);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!confirm('Are you sure you want to delete this customer review?')) return;
+    try {
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase
+          .from('reviews')
+          .delete()
+          .eq('id', reviewId);
+
+        if (error) throw error;
+      }
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+    } catch (err) {
+      console.error('Failed to delete review:', err);
+    }
+  };
+
+  const fetchProducts = async () => {
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.from('products').select('*');
+        if (!error && data) {
+          const formatted: Product[] = data.map((item: any) => ({
+            id: item.id,
+            name: item.name || item.title || 'Untitled Hardware',
+            brand: item.brand || 'ZeroLag',
+            category: item.category || 'all',
+            priceLkr: Number(item.price) || 0,
+            priceUsd: Number(item.price_usd) || Math.round((Number(item.price) || 0) / 300),
+            originalPriceLkr: Number(item.original_price || item.originalPrice) || Number(item.price) || undefined,
+            rating: Number(item.rating) || 5.0,
+            reviewsCount: Number(item.reviews_count) || 0,
+            image: item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
+            specs: item.specs || {},
+            description: item.description || '',
+            tags: item.features || item.tags || [item.brand || 'ZeroLag', item.category || 'all'],
+            inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : true,
+            stockCount: Number(item.stock || item.stock_count) || 10,
+            featured: item.featured ?? false,
+            badge: item.badge || undefined,
+            warranty: item.warranty_period || item.warranty || '1 Year Official Warranty'
+          }));
+
+          setProducts(formatted);
+          saveProducts(formatted);
+          return;
+        }
+      } catch (err) {
+        console.error('[Admin Dashboard] Supabase fetchProducts error:', err);
+      }
+    }
     setProducts(getStoredProducts());
+  };
+
+  const fetchSlides = async () => {
+    const fetched = await syncHeroSlidesFromSupabase();
+    setSlides(fetched);
+  };
+
+  const refreshData = async () => {
+    fetchProducts();
+    await fetchSlides();
     setOrders(getStoredOrders());
-    setSlides(getHeroSlides());
     setCategories(getDynamicCategories());
     setBankConfig(getStoredBankDetails());
+    fetchReviews();
   };
 
   useEffect(() => {
@@ -232,6 +457,11 @@ export default function AdminPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Please select a valid image file (PNG, JPG, WEBP).');
+      return;
+    }
+
     setUploading(true);
     setUploadError('');
 
@@ -241,22 +471,24 @@ export default function AdminPage() {
 
       const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
 
       const data = await res.json();
 
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || 'Failed to upload image');
-      }
-
-      if (target === 'product') {
-        setProductForm(prev => ({ ...prev, image: data.url }));
+      if (res.ok && data.url && data.url.startsWith('http')) {
+        // Save ONLY the hosted Cloudinary URL
+        if (target === 'product') {
+          setProductForm((prev) => ({ ...prev, image: data.url }));
+        } else {
+          setSlideForm((prev) => ({ ...prev, customImageUrl: data.url }));
+        }
       } else {
-        setSlideForm(prev => ({ ...prev, customImageUrl: data.url }));
+        throw new Error(data.error || 'Failed to obtain hosted Cloudinary URL.');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Image upload failed. Please try again.';
+      console.error('Cloudinary Upload Error:', err);
+      const message = err instanceof Error ? err.message : 'Image upload failed. Ensure Cloudinary keys are set.';
       setUploadError(message);
     } finally {
       setUploading(false);
@@ -308,8 +540,19 @@ export default function AdminPage() {
     setIsProductModalOpen(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (productForm.image.startsWith('data:image/')) {
+      setUploadError('Base64 image strings are not allowed. Please upload a valid image to obtain a Cloudinary hosted URL.');
+      return;
+    }
+
+    if (!productForm.image || !productForm.image.startsWith('http')) {
+      setUploadError('Please provide a valid hosted image URL (e.g. https://res.cloudinary.com/...).');
+      return;
+    }
+
     const specsObj: Record<string, string> = {};
     productForm.specKeys.forEach((key, idx) => {
       if (key.trim() && productForm.specVals[idx]) {
@@ -317,56 +560,215 @@ export default function AdminPage() {
       }
     });
 
-    const priceUsd = Math.round(productForm.priceLkr / 300);
+    const productId = editingProduct ? editingProduct.id : `prod-${Date.now()}`;
+    const title = productForm.name || '';
+    const price = Number(productForm.priceLkr) || 0;
+    const stock = Number(productForm.stockCount) || 0;
+    const imageUrl = productForm.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+    const warrantyPeriod = productForm.warranty || '1 Year Official Warranty';
+    const priceUsd = Math.round(price / 300);
+
+    const payload = {
+      id: productId,
+      name: title,
+      brand: productForm.brand,
+      category: productForm.category,
+      price: price,
+      original_price: Number(productForm.originalPriceLkr) || price,
+      image: imageUrl,
+      description: productForm.description || '',
+      features: [productForm.brand, productForm.category],
+      specs: specsObj,
+      in_stock: stock > 0 && productForm.inStock,
+      warranty: warrantyPeriod,
+      created_at: new Date().toISOString()
+    };
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = editingProduct
+          ? await supabase.from('products').upsert([payload]).select()
+          : await supabase.from('products').insert([payload]).select();
+
+        if (error) {
+          console.error('Supabase Product Insert Error:', error);
+          alert(`Failed to save product: ${error.message}`);
+          return;
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown database error';
+        console.error('Supabase Product Insertion Catch Error:', err);
+        alert(`Failed to save product: ${msg}`);
+        return;
+      }
+    }
 
     if (editingProduct) {
       const updated: Product = {
         ...editingProduct,
-        name: productForm.name,
+        name: title,
         category: productForm.category,
         brand: productForm.brand,
-        priceLkr: productForm.priceLkr,
+        priceLkr: price,
         priceUsd: priceUsd,
         originalPriceLkr: productForm.originalPriceLkr,
-        stockCount: productForm.stockCount,
-        inStock: productForm.stockCount > 0 && productForm.inStock,
-        image: productForm.image,
+        stockCount: stock,
+        inStock: stock > 0 && productForm.inStock,
+        image: imageUrl,
         badge: productForm.badge || undefined,
-        warranty: productForm.warranty,
+        warranty: warrantyPeriod,
         description: productForm.description,
         specs: specsObj
       };
       setProducts(updateStoredProduct(updated));
+      alert('Product updated successfully!');
     } else {
       const newProd: Product = {
-        id: `prod-${Date.now()}`,
-        name: productForm.name,
+        id: productId,
+        name: title,
         category: productForm.category,
         brand: productForm.brand,
-        priceLkr: productForm.priceLkr,
+        priceLkr: price,
         priceUsd: priceUsd,
         originalPriceLkr: productForm.originalPriceLkr,
         rating: 5.0,
         reviewsCount: 1,
-        image: productForm.image,
+        image: imageUrl,
         specs: specsObj,
         description: productForm.description,
         tags: [productForm.brand, productForm.category],
-        inStock: productForm.stockCount > 0 && productForm.inStock,
-        stockCount: productForm.stockCount,
+        inStock: stock > 0 && productForm.inStock,
+        stockCount: stock,
         featured: true,
         badge: productForm.badge || 'NEW',
-        warranty: productForm.warranty
+        warranty: warrantyPeriod
       };
       setProducts(addStoredProduct(newProd));
+      alert('Product added successfully!');
     }
 
+    await fetchProducts();
     setIsProductModalOpen(false);
   };
 
-  const handleDeleteProduct = (productId: string) => {
+  const handleDeleteProduct = async (productId: string) => {
     if (confirm('Delete this product item from inventory?')) {
       setProducts(deleteStoredProduct(productId));
+      await fetchProducts();
+    }
+  };
+
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv')) {
+      alert('Please select a valid CSV file exported from Google Sheets or Excel.');
+      return;
+    }
+
+    setIsImportingCSV(true);
+
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+
+      if (rows.length === 0) {
+        alert('The uploaded CSV file is empty or could not be parsed.');
+        setIsImportingCSV(false);
+        if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+        return;
+      }
+
+      const batch: any[] = [];
+      rows.forEach((row, idx) => {
+        const title = findHeaderValue(row, ['name', 'title', 'product name', 'product_name', 'item name', 'item']);
+        if (!title) return;
+
+        const category = findHeaderValue(row, ['category', 'cat', 'product category', 'type']) || 'all';
+        const brand = findHeaderValue(row, ['brand', 'manufacturer', 'make']) || 'ZeroLag';
+        const priceRaw = findHeaderValue(row, ['price', 'price (lkr)', 'unit price', 'cost', 'lkr price']);
+        const priceNum = Number(priceRaw.replace(/[^0-9.]/g, '')) || 0;
+        const origPriceRaw = findHeaderValue(row, ['original_price', 'original price', 'regular price', 'mrp', 'old price']);
+        const origPriceNum = origPriceRaw ? Number(origPriceRaw.replace(/[^0-9.]/g, '')) : priceNum;
+        const stockRaw = findHeaderValue(row, ['stock', 'quantity', 'qty', 'stock count', 'stock_count']);
+        const stockNum = stockRaw ? Number(stockRaw.replace(/[^0-9]/g, '')) : 10;
+        const desc = findHeaderValue(row, ['description', 'desc', 'details', 'product description']);
+        const rawImage = findHeaderValue(row, ['thumbnail', 'image1', 'image 1', 'link', 'image_url', 'image url', 'image', 'photo', 'picture', 'image link', 'img']);
+        const imageUrl = cleanImageUrl(rawImage);
+        const availRaw = findHeaderValue(row, ['availability', 'in_stock', 'status', 'stock_status']).toLowerCase();
+        const inStock = availRaw ? (availRaw.includes('show') || availRaw.includes('in stock') || availRaw.includes('available') || availRaw.includes('true') || stockNum > 0) : stockNum > 0;
+        const warranty = findHeaderValue(row, ['warranty', 'warranty_period', 'warranty term']) || '1 Year Official Warranty';
+
+        const id = `prod-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`;
+        batch.push({
+          id,
+          name: title,
+          brand,
+          category,
+          price: priceNum,
+          original_price: origPriceNum,
+          image: imageUrl,
+          description: desc,
+          features: [brand, category],
+          specs: {},
+          in_stock: inStock,
+          warranty,
+          created_at: new Date().toISOString()
+        });
+      });
+
+      if (batch.length === 0) {
+        alert('No valid product rows were found in the CSV file. Please ensure there is a "Name" or "Title" column header.');
+        setIsImportingCSV(false);
+        if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+        return;
+      }
+
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase.from('products').upsert(batch);
+        if (error) {
+          console.error('[CSV Import Error] Supabase upsert error:', error);
+          alert(`Failed to import products into Supabase: ${error.message}`);
+          setIsImportingCSV(false);
+          if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+          return;
+        }
+      }
+
+      // Sync local storage & state
+      const currentStored = getStoredProducts();
+      const newProducts: Product[] = batch.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        brand: item.brand,
+        category: item.category,
+        priceLkr: item.price,
+        priceUsd: Math.round(item.price / 300),
+        originalPriceLkr: item.original_price,
+        rating: 0,
+        reviewsCount: 0,
+        image: item.image,
+        specs: item.specs || {},
+        description: item.description,
+        tags: item.features || [],
+        inStock: item.in_stock,
+        stockCount: 10,
+        featured: true,
+        warranty: item.warranty
+      }));
+
+      saveProducts([...newProducts, ...currentStored]);
+      await fetchProducts();
+
+      alert(`Successfully imported ${batch.length} products!`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown CSV parse error';
+      console.error('[CSV Import Error]:', err);
+      alert(`Error parsing CSV file: ${msg}`);
+    } finally {
+      setIsImportingCSV(false);
+      if (csvFileInputRef.current) csvFileInputRef.current.value = '';
     }
   };
 
@@ -382,7 +784,7 @@ export default function AdminPage() {
       description: 'Engineered for competitive Sri Lankan esports champions.',
       primaryButtonText: 'SHOP HARDWARE',
       primaryButtonLink: '#catalog',
-      featuredProductId: products[0]?.id || 'prod-1',
+      featuredProductId: products[0]?.id || '',
       customImageUrl: '',
       isActive: true
     });
@@ -396,24 +798,27 @@ export default function AdminPage() {
     setIsSlideModalOpen(true);
   };
 
-  const handleSaveSlide = (e: React.FormEvent) => {
+  const handleSaveSlide = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingSlide) {
-      setSlides(updateHeroSlide(slideForm));
+      updateHeroSlide(slideForm);
     } else {
-      setSlides(addHeroSlide(slideForm));
+      addHeroSlide(slideForm);
     }
+    await fetchSlides();
     setIsSlideModalOpen(false);
   };
 
-  const handleToggleSlideActive = (slide: HeroSlide) => {
+  const handleToggleSlideActive = async (slide: HeroSlide) => {
     const updated = { ...slide, isActive: !slide.isActive };
-    setSlides(updateHeroSlide(updated));
+    updateHeroSlide(updated);
+    await fetchSlides();
   };
 
-  const handleDeleteSlide = (slideId: string) => {
+  const handleDeleteSlide = async (slideId: string) => {
     if (confirm('Delete this hero slide from banner carousel?')) {
-      setSlides(deleteHeroSlide(slideId));
+      deleteHeroSlide(slideId);
+      await fetchSlides();
     }
   };
 
@@ -712,6 +1117,18 @@ export default function AdminPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab('reviews')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
+                activeTab === 'reviews'
+                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
+                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+              }`}
+            >
+              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>Reviews ({reviews.length})</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('bank')}
               className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
                 activeTab === 'bank'
@@ -761,13 +1178,36 @@ export default function AdminPage() {
                 </select>
               </div>
 
-              <button
-                onClick={openCreateProductModal}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Product Item</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={csvFileInputRef}
+                  accept=".csv"
+                  onChange={handleCSVUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => csvFileInputRef.current?.click()}
+                  disabled={isImportingCSV}
+                  className="px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-lime-400 text-white font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                  title="Import products from Google Sheets / Excel CSV"
+                >
+                  {isImportingCSV ? (
+                    <Loader2 className="w-4 h-4 text-lime-400 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-lime-400" />
+                  )}
+                  <span>{isImportingCSV ? 'Importing...' : 'Import CSV'}</span>
+                </button>
+
+                <button
+                  onClick={openCreateProductModal}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Product Item</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-[#0a0c10] shadow-sm">
@@ -792,7 +1232,7 @@ export default function AdminPage() {
                           className="w-10 h-10 rounded-lg object-cover bg-zinc-950 shrink-0 border border-zinc-800"
                         />
                         <div>
-                          <Link href={`/product/${product.id}`} className="font-bold text-white text-xs line-clamp-1 hover:text-lime-400">
+                          <Link href={`/product/${getProductSlug(product)}`} className="font-bold text-white text-xs line-clamp-1 hover:text-lime-400">
                             {product.name}
                           </Link>
                           <span className="text-[10px] text-lime-400">{product.brand}</span>
@@ -1093,7 +1533,89 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* TAB 5: BANK CONFIGURATION */}
+        {/* TAB 5: REVIEWS MODERATION */}
+        {activeTab === 'reviews' && (
+          <div className="space-y-6">
+            <div className="bg-[#0a0c10] border border-zinc-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+              <div>
+                <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <span>CUSTOMER REVIEWS MODERATION</span>
+                </h3>
+                <p className="text-xs text-zinc-400 font-mono">Approve or reject customer submitted hardware reviews</p>
+              </div>
+              <span className="text-xs font-mono text-lime-400 font-bold">Total Reviews: {reviews.length}</span>
+            </div>
+
+            {reviews.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-[#0a0c10] border border-zinc-800 text-center space-y-2">
+                <Star className="w-8 h-8 text-zinc-600 mx-auto" />
+                <p className="text-xs font-mono text-zinc-400">No customer reviews submitted yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reviews.map(rev => (
+                  <div key={rev.id} className="p-5 rounded-2xl bg-[#0a0c10] border border-zinc-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 font-mono text-xs">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-white text-sm">{rev.user_name}</span>
+                        <span className="text-zinc-400">({rev.user_email})</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
+                          rev.status === 'approved'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : rev.status === 'rejected'
+                            ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {rev.status}
+                        </span>
+                      </div>
+                      <p className="text-zinc-300 font-sans text-xs pt-1">{rev.comment}</p>
+                      <div className="flex items-center gap-4 text-[11px] text-zinc-500 pt-1">
+                        <span>Product ID: {rev.product_id}</span>
+                        <span>•</span>
+                        <div className="flex items-center text-amber-400">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-zinc-700'}`} />
+                          ))}
+                        </div>
+                        <span>•</span>
+                        <span>{new Date(rev.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {rev.status !== 'approved' && (
+                        <button
+                          onClick={() => handleUpdateReviewStatus(rev.id, 'approved')}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30 font-bold transition-all cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {rev.status !== 'rejected' && (
+                        <button
+                          onClick={() => handleUpdateReviewStatus(rev.id, 'rejected')}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 font-bold transition-all cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteReview(rev.id)}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 font-bold transition-all cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 6: BANK CONFIGURATION */}
         {activeTab === 'bank' && (
           <div className="max-w-2xl bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
@@ -1235,7 +1757,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="text-zinc-400 block mb-1">Brand Name *</label>
                   <input
@@ -1266,6 +1788,33 @@ export default function AdminPage() {
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none"
                   />
                 </div>
+                <div>
+                  <label className="text-zinc-400 block mb-1">Warranty Term *</label>
+                  <select
+                    value={productForm.warranty}
+                    onChange={(e) => setProductForm({ ...productForm, warranty: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none"
+                  >
+                    <option value="1 Year Official Warranty">1 Year Official Warranty</option>
+                    <option value="2 Years Official Warranty">2 Years Official Warranty</option>
+                    <option value="6 Months Warranty">6 Months Warranty</option>
+                    <option value="No Warranty">No Warranty</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Product Description */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">
+                  PRODUCT DESCRIPTION
+                </label>
+                <textarea
+                  rows={3}
+                  value={productForm.description || ''}
+                  onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                  placeholder="Enter detailed description of the product features, specs, and warranty..."
+                  className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-lime-500"
+                />
               </div>
 
               {/* Cloudinary Upload */}
