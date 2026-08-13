@@ -1,6 +1,5 @@
 import { Product, OrderDetails, BankAccountDetails, HeroSlide, Category } from '@/types';
-import { INITIAL_PRODUCTS, CATEGORIES as DEFAULT_CATEGORIES } from './productsData';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { CATEGORIES as DEFAULT_CATEGORIES } from './productsData';
 
 const PRODUCTS_STORAGE_KEY = 'zerolag_products_v2';
 const ORDERS_STORAGE_KEY = 'zerolag_orders_v2';
@@ -56,48 +55,6 @@ export const INITIAL_HERO_SLIDES: HeroSlide[] = [
 
 export const INITIAL_ORDERS: OrderDetails[] = [];
 
-// Supabase Column Formatting Helpers
-function formatSupabaseProduct(p: Product) {
-  const gallery = p.galleryImages || [];
-  return {
-    id: p.id,
-    name: p.name,
-    brand: p.brand,
-    category: p.category,
-    price: p.priceLkr,
-    original_price: p.originalPriceLkr || p.priceLkr,
-    image: p.image,
-    images: [p.image, ...gallery],
-    gallery_images: gallery,
-    image2_url: gallery[0] || null,
-    image3_url: gallery[1] || null,
-    image4_url: gallery[2] || null,
-    description: p.description,
-    features: p.tags || [],
-    specs: p.specs || {},
-    in_stock: p.inStock,
-    rating: p.rating || 5.0,
-    warranty: p.warranty || '1 Year Official Warranty'
-  };
-}
-
-function formatSupabaseOrder(o: OrderDetails) {
-  return {
-    id: o.id || `ZLAG-${Math.floor(100000 + Math.random() * 900000)}`,
-    customer_name: o.customerName,
-    customer_email: o.email,
-    customer_phone: o.phone,
-    shipping_address: `${o.address}, ${o.city}, ${o.postalCode}`,
-    payment_method: o.paymentMethod,
-    items: o.items,
-    subtotal: o.subtotalLkr,
-    shipping_fee: o.shippingLkr || 0,
-    total_amount: o.totalLkr,
-    status: o.orderStatus || 'Pending',
-    created_at: o.createdAt || new Date().toISOString()
-  };
-}
-
 // Product Store API
 export function getStoredProducts(): Product[] {
   if (typeof window === 'undefined') return [];
@@ -123,70 +80,6 @@ export function getStoredProducts(): Product[] {
   }
 }
 
-export async function syncProductsFromSupabase(): Promise<Product[]> {
-  if (!isSupabaseConfigured()) return getStoredProducts();
-
-  try {
-    const { data, error } = await supabase.from('products').select('*');
-    if (error) {
-      console.warn('[Supabase Sync Warning]:', error.message);
-      return getStoredProducts();
-    }
-
-    if (data) {
-      const formatted: Product[] = data.map((item: any) => {
-        const imageUrl = item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
-        const galleryCols = [
-          item.image2_url || item.image2,
-          item.image3_url || item.image3,
-          item.image4_url || item.image4
-        ].filter(Boolean);
-
-        let galleryArr: string[] = [];
-        if (Array.isArray(item.gallery_images)) galleryArr = item.gallery_images;
-        else if (Array.isArray(item.galleryImages)) galleryArr = item.galleryImages;
-        else if (Array.isArray(item.images)) galleryArr = item.images;
-        else if (typeof item.gallery_images === 'string') {
-          try { galleryArr = JSON.parse(item.gallery_images); } catch {}
-        } else if (typeof item.images === 'string') {
-          try { galleryArr = JSON.parse(item.images); } catch {}
-        }
-
-        const galleryImages = Array.from(new Set([...galleryArr, ...galleryCols]))
-          .filter((img): img is string => typeof img === 'string' && img.trim().length > 0 && img !== imageUrl);
-
-        return {
-          id: String(item.id),
-          name: item.name || item.title || 'Untitled Hardware',
-          brand: item.brand || 'ZeroLag',
-          category: item.category || 'all',
-          priceLkr: Number(item.price) || 0,
-          priceUsd: Number(item.price_usd) || Math.round((Number(item.price) || 0) / 300),
-          originalPriceLkr: Number(item.original_price || item.originalPrice) || Number(item.price) || undefined,
-          rating: Number(item.rating) || 0,
-          reviewsCount: Number(item.reviews_count) || 0,
-          image: imageUrl,
-          galleryImages,
-          specs: item.specs || {},
-          description: item.description || '',
-          tags: item.features || item.tags || [item.brand || 'ZeroLag', item.category || 'all'],
-          inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : true,
-          stockCount: Number(item.stock || item.stock_count) || 10,
-          featured: item.featured ?? false,
-          badge: item.badge || undefined,
-          warranty: item.warranty_period || item.warranty || '1 Year Official Warranty'
-        };
-      });
-
-      saveProducts(formatted);
-      return formatted;
-    }
-  } catch (err) {
-    console.warn('[Supabase Sync Error]:', err);
-  }
-  return getStoredProducts();
-}
-
 export function saveProducts(products: Product[]): void {
   if (typeof window === 'undefined') return;
   try {
@@ -197,16 +90,38 @@ export function saveProducts(products: Product[]): void {
   }
 }
 
+export async function syncProductsFromDatabase(): Promise<Product[]> {
+  const cached = getStoredProducts();
+  if (typeof window === 'undefined') return cached;
+
+  try {
+    const res = await fetch('/api/products');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.products) && data.products.length > 0) {
+        saveProducts(data.products);
+        return data.products;
+      }
+    }
+  } catch (err) {
+    console.warn('[Products API Sync Warning]:', err);
+  }
+  return cached;
+}
+
+export const syncProductsFromSupabase = syncProductsFromDatabase;
+
 export function addStoredProduct(product: Product): Product[] {
   const products = getStoredProducts();
   const updated = [product, ...products];
   saveProducts(updated);
 
-  if (isSupabaseConfigured()) {
-    const supabasePayload = formatSupabaseProduct(product);
-    supabase.from('products').upsert([supabasePayload]).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to insert product:', error.message, error.details);
-    });
+  if (typeof window !== 'undefined') {
+    fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    }).catch(err => console.error('[Products API Insert Error]:', err));
   }
 
   return updated;
@@ -217,11 +132,12 @@ export function updateStoredProduct(updatedProduct: Product): Product[] {
   const updated = products.map(p => (p.id === updatedProduct.id ? updatedProduct : p));
   saveProducts(updated);
 
-  if (isSupabaseConfigured()) {
-    const supabasePayload = formatSupabaseProduct(updatedProduct);
-    supabase.from('products').update(supabasePayload).eq('id', updatedProduct.id).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to update product:', error.message, error.details);
-    });
+  if (typeof window !== 'undefined') {
+    fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedProduct)
+    }).catch(err => console.error('[Products API Update Error]:', err));
   }
 
   return updated;
@@ -232,10 +148,10 @@ export function deleteStoredProduct(productId: string): Product[] {
   const updated = products.filter(p => p.id !== productId);
   saveProducts(updated);
 
-  if (isSupabaseConfigured()) {
-    supabase.from('products').delete().eq('id', productId).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to delete product:', error.message, error.details);
-    });
+  if (typeof window !== 'undefined') {
+    fetch(`/api/products?id=${encodeURIComponent(productId)}`, {
+      method: 'DELETE'
+    }).catch(err => console.error('[Products API Delete Error]:', err));
   }
 
   return updated;
@@ -278,14 +194,6 @@ export function addStoredOrder(order: OrderDetails): OrderDetails[] {
 
   const updated = [newOrder, ...orders];
   saveOrders(updated);
-
-  if (isSupabaseConfigured()) {
-    const supabasePayload = formatSupabaseOrder(newOrder);
-    supabase.from('orders').upsert([supabasePayload]).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to insert order:', error.message, error.details);
-    });
-  }
-
   return updated;
 }
 
@@ -302,13 +210,6 @@ export function updateOrderStatus(orderId: string, status: OrderDetails['orderSt
     return o;
   });
   saveOrders(updated);
-
-  if (isSupabaseConfigured()) {
-    supabase.from('orders').update({ status: status }).eq('id', orderId).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to update order status:', error.message, error.details);
-    });
-  }
-
   return updated;
 }
 
@@ -370,47 +271,6 @@ export function getHeroSlides(): HeroSlide[] {
   }
 }
 
-export async function syncHeroSlidesFromSupabase(): Promise<HeroSlide[]> {
-  try {
-    if (!isSupabaseConfigured()) {
-      return getHeroSlides();
-    }
-
-    const { data, error } = await supabase.from('hero_slides').select('*');
-    if (!error && data && data.length > 0) {
-      const formatted: HeroSlide[] = data.map((item: any) => {
-        const fullTitle = item.title || item.name || `${item.titleFirstLine || ''} ${item.titleHighlight || ''}`.trim() || 'ZERO LAG HARDWARE';
-        const titleParts = fullTitle.split(' ');
-        const firstLine = titleParts.slice(0, Math.max(1, titleParts.length - 1)).join(' ');
-        const highlight = titleParts.length > 1 ? titleParts[titleParts.length - 1] : '';
-
-        return {
-          id: String(item.id),
-          badgeText: item.badge || item.badgeText || 'FLAGSHIP',
-          badge: item.badge || item.badgeText || 'FLAGSHIP',
-          titleFirstLine: item.titleFirstLine || firstLine,
-          titleHighlight: item.titleHighlight || highlight,
-          title: fullTitle,
-          description: item.description || item.subtitle || '',
-          subtitle: item.subtitle || item.description || '',
-          primaryButtonText: item.primary_button_text || item.primaryButtonText || 'EXPLORE CATALOG',
-          primaryButtonLink: item.primary_button_link || item.primaryButtonLink || '#catalog',
-          featuredProductId: item.featured_product_id || item.featuredProductId || '',
-          customImageUrl: formatSlideImageUrl(item.custom_image_url || item.customImageUrl || item.image || item.image_url),
-          isActive: item.is_active !== undefined ? Boolean(item.is_active) : (item.isActive ?? true)
-        };
-      });
-
-      saveHeroSlides(formatted);
-      return formatted;
-    }
-  } catch (err) {
-    console.warn('[Hero Slides Supabase Sync Error]:', err);
-  }
-
-  return getHeroSlides();
-}
-
 export function saveHeroSlides(slides: HeroSlide[]): void {
   if (typeof window === 'undefined') return;
   try {
@@ -421,6 +281,27 @@ export function saveHeroSlides(slides: HeroSlide[]): void {
   }
 }
 
+export async function syncHeroSlidesFromDatabase(): Promise<HeroSlide[]> {
+  const cached = getHeroSlides();
+  if (typeof window === 'undefined') return cached;
+
+  try {
+    const res = await fetch('/api/hero-slides');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.slides) && data.slides.length > 0) {
+        saveHeroSlides(data.slides);
+        return data.slides;
+      }
+    }
+  } catch (err) {
+    console.warn('[Hero Slides API Sync Warning]:', err);
+  }
+  return cached;
+}
+
+export const syncHeroSlidesFromSupabase = syncHeroSlidesFromDatabase;
+
 export function addHeroSlide(slide: HeroSlide): HeroSlide[] {
   const slides = getHeroSlides();
   const formattedSlide: HeroSlide = {
@@ -430,25 +311,12 @@ export function addHeroSlide(slide: HeroSlide): HeroSlide[] {
   const updated = [formattedSlide, ...slides];
   saveHeroSlides(updated);
 
-  if (isSupabaseConfigured()) {
-    (async () => {
-      try {
-        const { error } = await supabase.from('hero_slides').upsert([{
-          id: formattedSlide.id,
-          title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
-          subtitle: formattedSlide.description || formattedSlide.subtitle || '',
-          badge: formattedSlide.badgeText || formattedSlide.badge || '',
-          primary_button_text: formattedSlide.primaryButtonText,
-          primary_button_link: formattedSlide.primaryButtonLink,
-          featured_product_id: formattedSlide.featuredProductId,
-          custom_image_url: formattedSlide.customImageUrl,
-          is_active: formattedSlide.isActive ?? true
-        }]);
-        if (error) console.warn('[Supabase Warning] Failed to insert hero slide:', error.message);
-      } catch (err: unknown) {
-        console.warn('[Supabase Warning] Hero slide insert exception:', err);
-      }
-    })();
+  if (typeof window !== 'undefined') {
+    fetch('/api/hero-slides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formattedSlide)
+    }).catch(err => console.error('[Hero Slides API Insert Error]:', err));
   }
 
   return updated;
@@ -463,25 +331,12 @@ export function updateHeroSlide(slide: HeroSlide): HeroSlide[] {
   const updated = slides.map(s => (s.id === slide.id ? formattedSlide : s));
   saveHeroSlides(updated);
 
-  if (isSupabaseConfigured()) {
-    (async () => {
-      try {
-        const { error } = await supabase.from('hero_slides').upsert([{
-          id: formattedSlide.id,
-          title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
-          subtitle: formattedSlide.description || formattedSlide.subtitle || '',
-          badge: formattedSlide.badgeText || formattedSlide.badge || '',
-          primary_button_text: formattedSlide.primaryButtonText,
-          primary_button_link: formattedSlide.primaryButtonLink,
-          featured_product_id: formattedSlide.featuredProductId,
-          custom_image_url: formattedSlide.customImageUrl,
-          is_active: formattedSlide.isActive ?? true
-        }]);
-        if (error) console.warn('[Supabase Warning] Failed to update hero slide:', error.message);
-      } catch (err: unknown) {
-        console.warn('[Supabase Warning] Hero slide update exception:', err);
-      }
-    })();
+  if (typeof window !== 'undefined') {
+    fetch('/api/hero-slides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formattedSlide)
+    }).catch(err => console.error('[Hero Slides API Update Error]:', err));
   }
 
   return updated;
@@ -492,15 +347,10 @@ export function deleteHeroSlide(slideId: string): HeroSlide[] {
   const updated = slides.filter(s => s.id !== slideId);
   saveHeroSlides(updated);
 
-  if (isSupabaseConfigured()) {
-    (async () => {
-      try {
-        const { error } = await supabase.from('hero_slides').delete().eq('id', slideId);
-        if (error) console.warn('[Supabase Warning] Failed to delete hero slide:', error.message);
-      } catch (err: unknown) {
-        console.warn('[Supabase Warning] Hero slide delete exception:', err);
-      }
-    })();
+  if (typeof window !== 'undefined') {
+    fetch(`/api/hero-slides?id=${encodeURIComponent(slideId)}`, {
+      method: 'DELETE'
+    }).catch(err => console.error('[Hero Slides API Delete Error]:', err));
   }
 
   return updated;
@@ -564,13 +414,23 @@ export function cleanLogoUrl(url?: string): string {
       return `https://lh3.googleusercontent.com/d/${match[1]}`;
     }
   }
+
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('/') && !trimmed.startsWith('data:')) {
+    return `/${trimmed}`;
+  }
+
   return trimmed;
 }
 
 export function getStoredSiteLogo(): string {
   if (typeof window === 'undefined') return '';
   try {
-    return localStorage.getItem(LOGO_STORAGE_KEY) || localStorage.getItem('site_logo_url') || '';
+    const logo = localStorage.getItem('site_logo_url') ||
+      localStorage.getItem(LOGO_STORAGE_KEY) ||
+      localStorage.getItem('zerolag_site_logo_url_v1') ||
+      localStorage.getItem('temp_uploaded_logo') ||
+      '';
+    return cleanLogoUrl(logo);
   } catch {
     return '';
   }
@@ -588,42 +448,36 @@ export function saveSiteLogo(logoUrl: string): void {
     console.error('Error saving site logo to localStorage:', e);
   }
 
-  if (isSupabaseConfigured()) {
-    (async () => {
-      try {
-        const { error } = await supabase.from('site_settings').upsert([{ key: 'site_logo_url', value: cleaned }]);
-        if (error) {
-          console.warn('[Supabase Warning] Failed to update site_settings table:', error.message);
-        }
-      } catch (err: unknown) {
-        console.warn('[Supabase Warning] Exception in site_settings upsert:', err);
-      }
-    })();
+  if (typeof window !== 'undefined') {
+    fetch('/api/site-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'site_logo_url', value: cleaned })
+    }).catch(err => console.error('[Site Logo API Save Error]:', err));
   }
 }
 
-export async function syncSiteLogoFromSupabase(): Promise<string> {
+export async function syncSiteLogoFromDatabase(): Promise<string> {
+  const localLogo = getStoredSiteLogo();
+  if (typeof window === 'undefined') return localLogo;
+
   try {
-    if (!isSupabaseConfigured()) return getStoredSiteLogo();
-
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'site_logo_url')
-      .maybeSingle();
-
-    if (!error && data?.value) {
-      const cleaned = cleanLogoUrl(data.value);
-      if (typeof window !== 'undefined') {
+    const res = await fetch('/api/site-settings?key=site_logo_url');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.value) {
+        const cleaned = cleanLogoUrl(data.value);
         localStorage.setItem(LOGO_STORAGE_KEY, cleaned);
         localStorage.setItem('site_logo_url', cleaned);
         window.dispatchEvent(new Event('zerolag-logo-updated'));
         window.dispatchEvent(new Event('site_logo_updated'));
+        return cleaned;
       }
-      return cleaned;
     }
   } catch (err) {
-    console.warn('[Site Logo Supabase Sync Warning]:', err);
+    console.warn('[Site Logo API Sync Warning]:', err);
   }
-  return getStoredSiteLogo();
+  return localLogo;
 }
+
+export const syncSiteLogoFromSupabase = syncSiteLogoFromDatabase;

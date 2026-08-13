@@ -1,26 +1,20 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qtjnqymadnifvymimmps.supabase.co';
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  'placeholder-key';
+import { isMongoConfigured } from './mongodb';
 
 export const isSupabaseConfigured = (): boolean => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || url.includes('placeholder')) return false;
-  if ((!anonKey || anonKey.includes('placeholder')) && (!serviceKey || serviceKey.includes('placeholder'))) {
-    return false;
-  }
-
-  return true;
+  return isMongoConfigured();
 };
 
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false,
-  },
-});
+export const supabase = {
+  from: () => ({
+    select: () => Promise.resolve({ data: [], error: null, count: 0 }),
+    insert: () => Promise.resolve({ data: null, error: null }),
+    upsert: () => Promise.resolve({ data: null, error: null }),
+    update: () => Promise.resolve({ data: null, error: null }),
+    delete: () => Promise.resolve({ data: null, error: null }),
+    eq: function() { return this; },
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    single: () => Promise.resolve({ data: null, error: null }),
+    limit: function() { return this; },
+    order: function() { return this; }
+  })
+};

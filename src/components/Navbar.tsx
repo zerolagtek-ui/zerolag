@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { Category } from '@/types';
-import { getDynamicCategories, syncSiteLogoFromSupabase } from '@/lib/storeManager';
+import { getDynamicCategories, getStoredSiteLogo, syncSiteLogoFromSupabase, cleanLogoUrl } from '@/lib/storeManager';
 import { ShoppingBag, Bot, Shield, Search, Menu, X, MessageSquare, User, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
 
 export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selectedCategory }: {
@@ -13,6 +14,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   onSelectCategory?: (catId: string) => void;
   selectedCategory?: string;
 }) {
+  const pathname = usePathname();
   const { itemCount, setIsCartOpen, setIsAiOpen } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
@@ -22,24 +24,51 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   const [logoError, setLogoError] = useState<boolean>(false);
 
   const loadLogo = async () => {
-    const logo = await syncSiteLogoFromSupabase();
-    setSiteLogo(logo);
-    setLogoError(false);
+    const cached = getStoredSiteLogo();
+    if (cached) {
+      setSiteLogo(cleanLogoUrl(cached));
+      setLogoError(false);
+    }
+
+    const remoteLogo = await syncSiteLogoFromSupabase();
+    const finalLogo = cleanLogoUrl(remoteLogo || cached);
+    if (finalLogo) {
+      setSiteLogo(finalLogo);
+      setLogoError(false);
+    }
   };
 
   const syncCategories = () => {
     setCategories(getDynamicCategories());
   };
 
-  const checkAdminAuth = () => {
-    fetch('/api/admin/verify')
-      .then(res => res.json())
-      .then(data => {
-        setIsAdminLoggedIn(!!data.authenticated);
-      })
-      .catch(() => {
+  const checkAdminAuth = async (forceFetch = false) => {
+    if (typeof window === 'undefined') return;
+
+    const hasLocalAuthFlag = sessionStorage.getItem('zerolag_admin_auth') === 'true';
+
+    // Only call /api/admin/verify if local session indicates admin, or accessing /admin, or explicit forceFetch event
+    if (!hasLocalAuthFlag && !pathname.startsWith('/admin') && !forceFetch) {
+      setIsAdminLoggedIn(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/verify');
+      const data = await res.json().catch(() => ({ authenticated: false }));
+
+      if (res.ok && data.authenticated) {
+        setIsAdminLoggedIn(true);
+        sessionStorage.setItem('zerolag_admin_auth', 'true');
+      } else {
+        // On 401 Unauthorized or failure, stop retrying immediately
         setIsAdminLoggedIn(false);
-      });
+        sessionStorage.removeItem('zerolag_admin_auth');
+      }
+    } catch {
+      setIsAdminLoggedIn(false);
+      sessionStorage.removeItem('zerolag_admin_auth');
+    }
   };
 
   const handleAdminSignOut = async () => {
@@ -54,18 +83,25 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
   };
 
+  // Re-check and sync site logo & categories whenever pathname changes
+  useEffect(() => {
+    loadLogo();
+    syncCategories();
+  }, [pathname]);
+
+  // Initial Auth check & global event listeners (without path polling loops)
   useEffect(() => {
     checkAdminAuth();
-    syncCategories();
-    loadLogo();
+
+    const handleAuthChanged = () => checkAdminAuth(true);
 
     window.addEventListener('zerolag-categories-updated', syncCategories);
-    window.addEventListener('zerolag-admin-auth-changed', checkAdminAuth);
+    window.addEventListener('zerolag-admin-auth-changed', handleAuthChanged);
     window.addEventListener('zerolag-logo-updated', loadLogo);
     window.addEventListener('site_logo_updated', loadLogo);
     return () => {
       window.removeEventListener('zerolag-categories-updated', syncCategories);
-      window.removeEventListener('zerolag-admin-auth-changed', checkAdminAuth);
+      window.removeEventListener('zerolag-admin-auth-changed', handleAuthChanged);
       window.removeEventListener('zerolag-logo-updated', loadLogo);
       window.removeEventListener('site_logo_updated', loadLogo);
     };

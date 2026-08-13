@@ -8,6 +8,7 @@ import { Product, OrderDetails, OrderStatus, BankAccountDetails, HeroSlide, Cate
 import { formatPrice, getProductSlug } from '@/lib/productsData';
 import {
   getStoredProducts,
+  syncProductsFromDatabase,
   saveProducts,
   addStoredProduct,
   updateStoredProduct,
@@ -64,7 +65,7 @@ import {
   Star
 } from 'lucide-react';
 
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+
 
 interface AdminReview {
   id: string;
@@ -305,15 +306,13 @@ export default function AdminPage() {
   }, [router]);
 
   const fetchReviews = async () => {
-    if (!isSupabaseConfigured()) return;
     try {
-      const { data, error } = await supabase
-        .from('reviews')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        setReviews(data as AdminReview[]);
+      const res = await fetch('/api/reviews');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.reviews)) {
+          setReviews(data.reviews);
+        }
       }
     } catch (e) {
       console.warn('Error fetching reviews for admin:', e);
@@ -322,14 +321,11 @@ export default function AdminPage() {
 
   const handleUpdateReviewStatus = async (reviewId: string, newStatus: 'approved' | 'rejected') => {
     try {
-      if (isSupabaseConfigured()) {
-        const { error } = await supabase
-          .from('reviews')
-          .update({ status: newStatus })
-          .eq('id', reviewId);
-
-        if (error) throw error;
-      }
+      await fetch('/api/reviews', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: reviewId, status: newStatus })
+      });
       setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, status: newStatus } : r));
     } catch (err) {
       console.error('Failed to update review status:', err);
@@ -339,14 +335,9 @@ export default function AdminPage() {
   const handleDeleteReview = async (reviewId: string) => {
     if (!confirm('Are you sure you want to delete this customer review?')) return;
     try {
-      if (isSupabaseConfigured()) {
-        const { error } = await supabase
-          .from('reviews')
-          .delete()
-          .eq('id', reviewId);
-
-        if (error) throw error;
-      }
+      await fetch(`/api/reviews?id=${encodeURIComponent(reviewId)}`, {
+        method: 'DELETE'
+      });
       setReviews(prev => prev.filter(r => r.id !== reviewId));
     } catch (err) {
       console.error('Failed to delete review:', err);
@@ -354,40 +345,8 @@ export default function AdminPage() {
   };
 
   const fetchProducts = async () => {
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase.from('products').select('*');
-        if (!error && data) {
-          const formatted: Product[] = data.map((item: any) => ({
-            id: item.id,
-            name: item.name || item.title || 'Untitled Hardware',
-            brand: item.brand || 'ZeroLag',
-            category: item.category || 'all',
-            priceLkr: Number(item.price) || 0,
-            priceUsd: Number(item.price_usd) || Math.round((Number(item.price) || 0) / 300),
-            originalPriceLkr: Number(item.original_price || item.originalPrice) || Number(item.price) || undefined,
-            rating: Number(item.rating) || 5.0,
-            reviewsCount: Number(item.reviews_count) || 0,
-            image: item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
-            specs: item.specs || {},
-            description: item.description || '',
-            tags: item.features || item.tags || [item.brand || 'ZeroLag', item.category || 'all'],
-            inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : true,
-            stockCount: Number(item.stock || item.stock_count) || 10,
-            featured: item.featured ?? false,
-            badge: item.badge || undefined,
-            warranty: item.warranty_period || item.warranty || '1 Year Official Warranty'
-          }));
-
-          setProducts(formatted);
-          saveProducts(formatted);
-          return;
-        }
-      } catch (err) {
-        console.error('[Admin Dashboard] Supabase fetchProducts error:', err);
-      }
-    }
-    setProducts(getStoredProducts());
+    const dbProducts = await syncProductsFromDatabase();
+    setProducts(dbProducts);
   };
 
   const fetchSlides = async () => {
@@ -633,45 +592,7 @@ export default function AdminPage() {
       created_at: new Date().toISOString()
     };
 
-    if (isSupabaseConfigured()) {
-      try {
-        const { error } = editingProduct
-          ? await supabase.from('products').upsert([payload])
-          : await supabase.from('products').insert([payload]);
 
-        if (error) {
-          console.warn('Supabase Product Insert Warning with gallery fields, retrying without optional gallery columns:', error.message);
-          const basePayload = {
-            id: productId,
-            name: title,
-            brand: productForm.brand,
-            category: productForm.category,
-            price: price,
-            original_price: Number(productForm.originalPriceLkr) || price,
-            image: imageUrl,
-            description: productForm.description || '',
-            features: [productForm.brand, productForm.category],
-            specs: specsObj,
-            in_stock: stock > 0 && productForm.inStock,
-            warranty: warrantyPeriod,
-            created_at: new Date().toISOString()
-          };
-          const { error: retryErr } = editingProduct
-            ? await supabase.from('products').upsert([basePayload])
-            : await supabase.from('products').insert([basePayload]);
-
-          if (retryErr) {
-            alert(`Failed to save product: ${retryErr.message}`);
-            return;
-          }
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Unknown database error';
-        console.error('Supabase Product Insertion Catch Error:', err);
-        alert(`Failed to save product: ${msg}`);
-        return;
-      }
-    }
 
     if (editingProduct) {
       const updated: Product = {
@@ -797,14 +718,15 @@ export default function AdminPage() {
         return;
       }
 
-      if (isSupabaseConfigured()) {
-        const { error } = await supabase.from('products').upsert(batch);
-        if (error) {
-          console.error('[CSV Import Error] Supabase upsert error:', error);
-          alert(`Failed to import products into Supabase: ${error.message}`);
-          setIsImportingCSV(false);
-          if (csvFileInputRef.current) csvFileInputRef.current.value = '';
-          return;
+      for (const item of batch) {
+        try {
+          await fetch('/api/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item)
+          });
+        } catch (mongoErr) {
+          console.error('[CSV Import Error] Product sync error:', mongoErr);
         }
       }
 

@@ -3,23 +3,39 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Shield, Truck, CreditCard, Clock, Phone, Mail, Award } from 'lucide-react';
 import { CATEGORIES } from '@/lib/productsData';
-import { syncSiteLogoFromSupabase } from '@/lib/storeManager';
+import { getStoredSiteLogo, syncSiteLogoFromSupabase, cleanLogoUrl } from '@/lib/storeManager';
 
 export function Footer() {
+  const pathname = usePathname();
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
   const [siteLogo, setSiteLogo] = useState<string>('');
   const [logoError, setLogoError] = useState<boolean>(false);
 
   const loadLogo = async () => {
-    const logo = await syncSiteLogoFromSupabase();
-    setSiteLogo(logo);
-    setLogoError(false);
+    const cached = getStoredSiteLogo();
+    if (cached) {
+      setSiteLogo(cleanLogoUrl(cached));
+      setLogoError(false);
+    }
+
+    const remoteLogo = await syncSiteLogoFromSupabase();
+    const finalLogo = cleanLogoUrl(remoteLogo || cached);
+    if (finalLogo) {
+      setSiteLogo(finalLogo);
+      setLogoError(false);
+    }
   };
 
+  // Re-check and sync site logo whenever pathname changes
   useEffect(() => {
     loadLogo();
+  }, [pathname]);
+
+  // Initial event listeners setup
+  useEffect(() => {
     window.addEventListener('zerolag-logo-updated', loadLogo);
     window.addEventListener('site_logo_updated', loadLogo);
     return () => {

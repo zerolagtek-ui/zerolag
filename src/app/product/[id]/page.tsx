@@ -3,11 +3,10 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { getStoredProducts } from '@/lib/storeManager';
+import { getStoredProducts, syncProductsFromDatabase } from '@/lib/storeManager';
 import { Product } from '@/types';
 import { formatPrice, getProductSlug, generateSlug } from '@/lib/productsData';
 import { useCart } from '@/context/CartContext';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { CartDrawer } from '@/components/CartDrawer';
@@ -63,74 +62,17 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [reviewNotice, setReviewNotice] = useState('');
 
   const fetchApprovedReviews = async (productId: string) => {
-    if (!isSupabaseConfigured()) return;
     try {
-      const { data, error } = await supabase
-        .from('reviews')
-        .select('*')
-        .eq('product_id', productId)
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        setApprovedReviews(data as ReviewItem[]);
+      const res = await fetch(`/api/reviews?product_id=${encodeURIComponent(productId)}&status=approved`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.reviews)) {
+          setApprovedReviews(data.reviews);
+        }
       }
     } catch (e) {
       console.warn('Error fetching approved reviews:', e);
     }
-  };
-
-  const mapSupabaseProduct = (data: any): Product => {
-    const title = data.name || data.title || 'Untitled Hardware';
-    const imageUrl = data.image_url || data.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
-    const priceLkr = Number(data.price) || 0;
-    const priceUsd = Number(data.price_usd) || Math.round(priceLkr / 300);
-    const originalPriceLkr = Number(data.original_price || data.originalPrice) || priceLkr;
-    const description = data.description || 'No detailed description available.';
-    const warranty = data.warranty_period || data.warranty || '1 Year Official Warranty';
-    const stockCount = Number(data.stock || data.stock_count) || 10;
-    const inStock = data.in_stock !== undefined ? Boolean(data.in_stock) : stockCount > 0;
-
-    const galleryCols = [
-      data.image2_url || data.image2,
-      data.image3_url || data.image3,
-      data.image4_url || data.image4
-    ].filter(Boolean);
-
-    let galleryArr: string[] = [];
-    if (Array.isArray(data.gallery_images)) galleryArr = data.gallery_images;
-    else if (Array.isArray(data.galleryImages)) galleryArr = data.galleryImages;
-    else if (Array.isArray(data.images)) galleryArr = data.images;
-    else if (typeof data.gallery_images === 'string') {
-      try { galleryArr = JSON.parse(data.gallery_images); } catch {}
-    } else if (typeof data.images === 'string') {
-      try { galleryArr = JSON.parse(data.images); } catch {}
-    }
-
-    const galleryImages = Array.from(new Set([...galleryArr, ...galleryCols]))
-      .filter((img): img is string => typeof img === 'string' && img.trim().length > 0 && img !== imageUrl);
-
-    return {
-      id: String(data.id),
-      name: title,
-      brand: data.brand || 'ZeroLag',
-      category: data.category || 'all',
-      priceLkr,
-      priceUsd,
-      originalPriceLkr,
-      rating: Number(data.rating) || 0,
-      reviewsCount: Number(data.reviews_count) || 0,
-      image: imageUrl,
-      galleryImages,
-      specs: data.specs || {},
-      description,
-      tags: data.features || data.tags || [],
-      inStock,
-      stockCount,
-      featured: data.featured ?? false,
-      badge: data.badge || undefined,
-      warranty
-    };
   };
 
   useEffect(() => {
@@ -139,8 +81,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         if (!p) return false;
         const target = id;
         const pIdStr = String(p.id);
-        const pTitle = p.name || (p as any).title || '';
-        const slugifiedTitle = generateSlug(pTitle);
+        const pTitle = p.name || (p as unknown as Record<string, unknown>).title || '';
+        const slugifiedTitle = generateSlug(String(pTitle));
 
         return (
           pIdStr === target ||
@@ -151,47 +93,19 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         );
       };
 
-      // 1. Try fetching directly from Supabase single item query by ID
-      if (isSupabaseConfigured()) {
-        try {
-          const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('id', id)
-            .single();
+      // 1. Sync from DB / storeManager
+      const dbProducts = await syncProductsFromDatabase();
+      setAllProducts(dbProducts);
 
-          if (!error && data) {
-            const mapped = mapSupabaseProduct(data);
-            setProduct(mapped);
-            setSelectedImage(mapped.image);
-            fetchApprovedReviews(mapped.id);
-            return;
-          }
-        } catch (e) {
-          console.warn('[Product Detail] Single item ID fetch failed, trying slug match:', e);
-        }
-
-        // 2. Query all products from Supabase and match by slugified title or ID
-        try {
-          const { data, error } = await supabase.from('products').select('*');
-          if (!error && data && data.length > 0) {
-            const allMapped = data.map(mapSupabaseProduct);
-            setAllProducts(allMapped);
-
-            const foundInSupabase = allMapped.find(matchProduct);
-            if (foundInSupabase) {
-              setProduct(foundInSupabase);
-              setSelectedImage(foundInSupabase.image);
-              fetchApprovedReviews(foundInSupabase.id);
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn('[Product Detail] Full table fetch fallback failed:', e);
-        }
+      const foundInDb = dbProducts.find(matchProduct);
+      if (foundInDb) {
+        setProduct(foundInDb);
+        setSelectedImage(foundInDb.image);
+        fetchApprovedReviews(foundInDb.id);
+        return;
       }
 
-      // 3. Final fallback: Check local storage cache before showing "Product Not Found"
+      // 2. Final fallback: Check local storage cache before showing "Product Not Found"
       const productsList = getStoredProducts();
       setAllProducts(prev => (prev.length > 0 ? prev : productsList));
 
@@ -225,20 +139,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     setReviewNotice('');
 
     try {
-      if (isSupabaseConfigured()) {
-        const { error } = await supabase.from('reviews').insert([
-          {
-            product_id: product.id,
-            user_name: reviewerName.trim(),
-            user_email: reviewerEmail.trim(),
-            rating: reviewRating,
-            comment: reviewComment.trim(),
-            status: 'pending'
-          }
-        ]);
-
-        if (error) throw error;
-      }
+      await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          user_name: reviewerName.trim(),
+          user_email: reviewerEmail.trim(),
+          rating: reviewRating,
+          comment: reviewComment.trim(),
+          status: 'pending'
+        })
+      });
 
       setReviewNotice('Thank you! Your review has been submitted and is pending admin approval.');
       setReviewerName('');

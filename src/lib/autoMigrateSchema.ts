@@ -1,75 +1,46 @@
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
+import UserModel from '@/lib/models/User';
 
 let isSchemaMigrated = false;
 
 export async function autoMigrateSchema(): Promise<{ success: boolean; message?: string }> {
   if (isSchemaMigrated) {
-    return { success: true, message: 'Schema migration already completed in current server lifecycle.' };
+    return { success: true, message: 'Schema initialization already completed in current server lifecycle.' };
   }
 
-  if (!isSupabaseConfigured()) {
-    return { success: false, message: 'Supabase credentials unconfigured.' };
+  if (!isMongoConfigured()) {
+    return { success: false, message: 'MongoDB credentials unconfigured.' };
   }
 
   try {
-    // 1. Probe & Seed default Admin User into public.users (Always verified)
-    const adminEmail = 'zerolagtek@gmail.com';
-    const { data: existingAdmin, error: checkError } = await supabase
-      .from('users')
-      .select('id, email, role, is_verified')
-      .eq('email', adminEmail)
-      .maybeSingle();
-
-    if (checkError) {
-      console.warn('[Auto Migration Notice]: Users table query:', checkError.message);
+    const conn = await connectToDatabase();
+    if (!conn) {
+      return { success: false, message: 'Could not connect to MongoDB.' };
     }
 
-    if (!existingAdmin) {
-      const { error: seedError } = await supabase.from('users').upsert([
-        {
+    const adminEmail = 'zerolagtek@gmail.com';
+    await UserModel.findOneAndUpdate(
+      { email: adminEmail },
+      {
+        $setOnInsert: {
           email: adminEmail,
           password_hash: 'admin123',
           name: 'ZeroLag Admin',
           role: 'admin',
-          is_verified: true
+          is_admin: true,
+          is_verified: true,
+          created_at: new Date()
         }
-      ], { onConflict: 'email' });
+      },
+      { upsert: true, new: true }
+    );
 
-      if (seedError) {
-        console.warn('[Auto Migration Notice]: Could not seed default admin user:', seedError.message);
-      } else {
-        console.log('[Auto Migration]: Successfully seeded default admin user into public.users.');
-      }
-    } else if (!existingAdmin.is_verified) {
-      // Ensure admin is verified
-      await supabase.from('users').update({ is_verified: true }).eq('email', adminEmail);
-    }
-
-    // 2. Probe public.products table
-    const { error: productsError } = await supabase
-      .from('products')
-      .select('id, warranty')
-      .limit(1);
-
-    if (productsError) {
-      console.warn('[Auto Migration Notice]: Products table query:', productsError.message);
-    }
-
-    // 3. Probe public.reviews table
-    const { error: reviewsError } = await supabase
-      .from('reviews')
-      .select('id')
-      .limit(1);
-
-    if (reviewsError) {
-      console.warn('[Auto Migration Notice]: Reviews table query:', reviewsError.message);
-    }
-
+    console.log('[MongoDB Auto Migration]: Admin user seeded/verified successfully.');
     isSchemaMigrated = true;
-    return { success: true, message: 'Auto-migration completed successfully.' };
+    return { success: true, message: 'MongoDB initialization completed successfully.' };
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown auto-migration error';
-    console.error('[Auto Migration Error]:', msg);
+    console.error('[MongoDB Auto Migration Error]:', msg);
     return { success: false, message: msg };
   }
 }

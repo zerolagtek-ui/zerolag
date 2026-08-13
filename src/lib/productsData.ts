@@ -102,39 +102,13 @@ export function getProductSlug(product: { id: string; name?: string; title?: str
 }
 
 
-export async function getProductsFromSupabase(): Promise<any[]> {
+export async function getProductsFromSupabase(): Promise<Product[]> {
   try {
-    const { supabase, isSupabaseConfigured } = await import('@/lib/supabase');
-    if (!isSupabaseConfigured()) return [];
-
-    const { data, error } = await supabase.from('products').select('*');
-    if (!error && data) {
-      return data.map((row: any) => ({
-        id: row.id,
-        name: row.name || row.title || 'Untitled Hardware',
-        title: row.name || row.title || 'Untitled Hardware',
-        brand: row.brand || 'ZeroLag',
-        category: row.category || 'all',
-        price: Number(row.price) || 0,
-        priceLkr: Number(row.price) || 0,
-        priceUsd: Number(row.price_usd) || Math.round((Number(row.price) || 0) / 300),
-        originalPrice: Number(row.original_price || row.originalPrice) || Number(row.price) || 0,
-        originalPriceLkr: Number(row.original_price || row.originalPrice) || Number(row.price) || 0,
-        rating: Number(row.rating) || 0,
-        reviewsCount: Number(row.reviews_count) || 0,
-        image: row.image_url || row.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
-        imageUrl: row.image_url || row.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
-        stock: Number(row.stock || row.stock_count) || 10,
-        stockCount: Number(row.stock || row.stock_count) || 10,
-        inStock: row.in_stock !== undefined ? Boolean(row.in_stock) : true,
-        description: row.description || '',
-        warranty: row.warranty_period || row.warranty || '1 Year Official Warranty',
-        specs: row.specs || {},
-        tags: row.features || row.tags || []
-      }));
-    }
+    const { syncProductsFromDatabase } = await import('@/lib/storeManager');
+    const products = await syncProductsFromDatabase();
+    return products;
   } catch (err) {
-    console.error('Error fetching products from Supabase:', err);
+    console.error('Error fetching products from MongoDB database:', err);
   }
   return [];
 }
