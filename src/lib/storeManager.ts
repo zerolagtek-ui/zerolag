@@ -58,6 +58,7 @@ export const INITIAL_ORDERS: OrderDetails[] = [];
 
 // Supabase Column Formatting Helpers
 function formatSupabaseProduct(p: Product) {
+  const gallery = p.galleryImages || [];
   return {
     id: p.id,
     name: p.name,
@@ -66,6 +67,11 @@ function formatSupabaseProduct(p: Product) {
     price: p.priceLkr,
     original_price: p.originalPriceLkr || p.priceLkr,
     image: p.image,
+    images: [p.image, ...gallery],
+    gallery_images: gallery,
+    image2_url: gallery[0] || null,
+    image3_url: gallery[1] || null,
+    image4_url: gallery[2] || null,
     description: p.description,
     features: p.tags || [],
     specs: p.specs || {},
@@ -128,26 +134,49 @@ export async function syncProductsFromSupabase(): Promise<Product[]> {
     }
 
     if (data) {
-      const formatted: Product[] = data.map((item: any) => ({
-        id: item.id,
-        name: item.name || item.title || 'Untitled Hardware',
-        brand: item.brand || 'ZeroLag',
-        category: item.category || 'all',
-        priceLkr: Number(item.price) || 0,
-        priceUsd: Number(item.price_usd) || Math.round((Number(item.price) || 0) / 300),
-        originalPriceLkr: Number(item.original_price || item.originalPrice) || Number(item.price) || undefined,
-        rating: Number(item.rating) || 0,
-        reviewsCount: Number(item.reviews_count) || 0,
-        image: item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
-        specs: item.specs || {},
-        description: item.description || '',
-        tags: item.features || item.tags || [item.brand || 'ZeroLag', item.category || 'all'],
-        inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : true,
-        stockCount: Number(item.stock || item.stock_count) || 10,
-        featured: item.featured ?? false,
-        badge: item.badge || undefined,
-        warranty: item.warranty_period || item.warranty || '1 Year Official Warranty'
-      }));
+      const formatted: Product[] = data.map((item: any) => {
+        const imageUrl = item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+        const galleryCols = [
+          item.image2_url || item.image2,
+          item.image3_url || item.image3,
+          item.image4_url || item.image4
+        ].filter(Boolean);
+
+        let galleryArr: string[] = [];
+        if (Array.isArray(item.gallery_images)) galleryArr = item.gallery_images;
+        else if (Array.isArray(item.galleryImages)) galleryArr = item.galleryImages;
+        else if (Array.isArray(item.images)) galleryArr = item.images;
+        else if (typeof item.gallery_images === 'string') {
+          try { galleryArr = JSON.parse(item.gallery_images); } catch {}
+        } else if (typeof item.images === 'string') {
+          try { galleryArr = JSON.parse(item.images); } catch {}
+        }
+
+        const galleryImages = Array.from(new Set([...galleryArr, ...galleryCols]))
+          .filter((img): img is string => typeof img === 'string' && img.trim().length > 0 && img !== imageUrl);
+
+        return {
+          id: String(item.id),
+          name: item.name || item.title || 'Untitled Hardware',
+          brand: item.brand || 'ZeroLag',
+          category: item.category || 'all',
+          priceLkr: Number(item.price) || 0,
+          priceUsd: Number(item.price_usd) || Math.round((Number(item.price) || 0) / 300),
+          originalPriceLkr: Number(item.original_price || item.originalPrice) || Number(item.price) || undefined,
+          rating: Number(item.rating) || 0,
+          reviewsCount: Number(item.reviews_count) || 0,
+          image: imageUrl,
+          galleryImages,
+          specs: item.specs || {},
+          description: item.description || '',
+          tags: item.features || item.tags || [item.brand || 'ZeroLag', item.category || 'all'],
+          inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : true,
+          stockCount: Number(item.stock || item.stock_count) || 10,
+          featured: item.featured ?? false,
+          badge: item.badge || undefined,
+          warranty: item.warranty_period || item.warranty || '1 Year Official Warranty'
+        };
+      });
 
       saveProducts(formatted);
       return formatted;
@@ -402,19 +431,24 @@ export function addHeroSlide(slide: HeroSlide): HeroSlide[] {
   saveHeroSlides(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('hero_slides').upsert([{
-      id: formattedSlide.id,
-      title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
-      subtitle: formattedSlide.description || formattedSlide.subtitle || '',
-      badge: formattedSlide.badgeText || formattedSlide.badge || '',
-      primary_button_text: formattedSlide.primaryButtonText,
-      primary_button_link: formattedSlide.primaryButtonLink,
-      featured_product_id: formattedSlide.featuredProductId,
-      custom_image_url: formattedSlide.customImageUrl,
-      is_active: formattedSlide.isActive ?? true
-    }]).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to insert hero slide:', error.message);
-    });
+    (async () => {
+      try {
+        const { error } = await supabase.from('hero_slides').upsert([{
+          id: formattedSlide.id,
+          title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
+          subtitle: formattedSlide.description || formattedSlide.subtitle || '',
+          badge: formattedSlide.badgeText || formattedSlide.badge || '',
+          primary_button_text: formattedSlide.primaryButtonText,
+          primary_button_link: formattedSlide.primaryButtonLink,
+          featured_product_id: formattedSlide.featuredProductId,
+          custom_image_url: formattedSlide.customImageUrl,
+          is_active: formattedSlide.isActive ?? true
+        }]);
+        if (error) console.warn('[Supabase Warning] Failed to insert hero slide:', error.message);
+      } catch (err: unknown) {
+        console.warn('[Supabase Warning] Hero slide insert exception:', err);
+      }
+    })();
   }
 
   return updated;
@@ -430,19 +464,24 @@ export function updateHeroSlide(slide: HeroSlide): HeroSlide[] {
   saveHeroSlides(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('hero_slides').upsert([{
-      id: formattedSlide.id,
-      title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
-      subtitle: formattedSlide.description || formattedSlide.subtitle || '',
-      badge: formattedSlide.badgeText || formattedSlide.badge || '',
-      primary_button_text: formattedSlide.primaryButtonText,
-      primary_button_link: formattedSlide.primaryButtonLink,
-      featured_product_id: formattedSlide.featuredProductId,
-      custom_image_url: formattedSlide.customImageUrl,
-      is_active: formattedSlide.isActive ?? true
-    }]).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to update hero slide:', error.message);
-    });
+    (async () => {
+      try {
+        const { error } = await supabase.from('hero_slides').upsert([{
+          id: formattedSlide.id,
+          title: formattedSlide.title || `${formattedSlide.titleFirstLine || ''} ${formattedSlide.titleHighlight || ''}`.trim(),
+          subtitle: formattedSlide.description || formattedSlide.subtitle || '',
+          badge: formattedSlide.badgeText || formattedSlide.badge || '',
+          primary_button_text: formattedSlide.primaryButtonText,
+          primary_button_link: formattedSlide.primaryButtonLink,
+          featured_product_id: formattedSlide.featuredProductId,
+          custom_image_url: formattedSlide.customImageUrl,
+          is_active: formattedSlide.isActive ?? true
+        }]);
+        if (error) console.warn('[Supabase Warning] Failed to update hero slide:', error.message);
+      } catch (err: unknown) {
+        console.warn('[Supabase Warning] Hero slide update exception:', err);
+      }
+    })();
   }
 
   return updated;
@@ -454,9 +493,14 @@ export function deleteHeroSlide(slideId: string): HeroSlide[] {
   saveHeroSlides(updated);
 
   if (isSupabaseConfigured()) {
-    supabase.from('hero_slides').delete().eq('id', slideId).then(({ error }) => {
-      if (error) console.error('[Supabase Error] Failed to delete hero slide:', error.message);
-    });
+    (async () => {
+      try {
+        const { error } = await supabase.from('hero_slides').delete().eq('id', slideId);
+        if (error) console.warn('[Supabase Warning] Failed to delete hero slide:', error.message);
+      } catch (err: unknown) {
+        console.warn('[Supabase Warning] Hero slide delete exception:', err);
+      }
+    })();
   }
 
   return updated;

@@ -227,6 +227,9 @@ export default function AdminPage() {
     stockCount: number;
     inStock: boolean;
     image: string;
+    image2: string;
+    image3: string;
+    image4: string;
     badge: string;
     warranty: string;
     description: string;
@@ -241,6 +244,9 @@ export default function AdminPage() {
     stockCount: 10,
     inStock: true,
     image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80',
+    image2: '',
+    image3: '',
+    image4: '',
     badge: 'NEW',
     warranty: '1 Year Warranty',
     description: 'High performance tech gear.',
@@ -466,7 +472,10 @@ export default function AdminPage() {
   };
 
   // Cloudinary Upload Handler (Shared)
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'product' | 'slide' | 'logo') => {
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: 'product' | 'product_image2' | 'product_image3' | 'product_image4' | 'slide' | 'logo'
+  ) => {
     if (e) e.preventDefault();
     const file = e.target.files?.[0];
     if (!file) return;
@@ -494,6 +503,12 @@ export default function AdminPage() {
         const cleanedUrl = cleanLogoUrl(data.url);
         if (target === 'product') {
           setProductForm((prev) => ({ ...prev, image: data.url }));
+        } else if (target === 'product_image2') {
+          setProductForm((prev) => ({ ...prev, image2: data.url }));
+        } else if (target === 'product_image3') {
+          setProductForm((prev) => ({ ...prev, image3: data.url }));
+        } else if (target === 'product_image4') {
+          setProductForm((prev) => ({ ...prev, image4: data.url }));
         } else if (target === 'slide') {
           setSlideForm((prev) => ({ ...prev, customImageUrl: data.url }));
         } else if (target === 'logo') {
@@ -527,6 +542,9 @@ export default function AdminPage() {
       stockCount: 10,
       inStock: true,
       image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80',
+      image2: '',
+      image3: '',
+      image4: '',
       badge: 'NEW',
       warranty: '1 Year Warranty',
       description: 'High performance tech hardware.',
@@ -541,6 +559,7 @@ export default function AdminPage() {
     setUploadError('');
     const keys = Object.keys(product.specs || {});
     const vals = Object.values(product.specs || {});
+    const gallery = product.galleryImages || [];
     setProductForm({
       name: product.name,
       category: product.category,
@@ -550,6 +569,9 @@ export default function AdminPage() {
       stockCount: product.stockCount,
       inStock: product.inStock,
       image: product.image,
+      image2: gallery[0] || '',
+      image3: gallery[1] || '',
+      image4: gallery[2] || '',
       badge: product.badge || '',
       warranty: product.warranty || '1 Year Warranty',
       description: product.description,
@@ -584,10 +606,13 @@ export default function AdminPage() {
     const price = Number(productForm.priceLkr) || 0;
     const stock = Number(productForm.stockCount) || 0;
     const imageUrl = productForm.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+    const galleryImages = [productForm.image2, productForm.image3, productForm.image4]
+      .map(img => img.trim())
+      .filter(img => img.length > 0 && img !== imageUrl);
     const warrantyPeriod = productForm.warranty || '1 Year Official Warranty';
     const priceUsd = Math.round(price / 300);
 
-    const payload = {
+    const payload: any = {
       id: productId,
       name: title,
       brand: productForm.brand,
@@ -595,6 +620,11 @@ export default function AdminPage() {
       price: price,
       original_price: Number(productForm.originalPriceLkr) || price,
       image: imageUrl,
+      images: [imageUrl, ...galleryImages],
+      gallery_images: galleryImages,
+      image2_url: galleryImages[0] || null,
+      image3_url: galleryImages[1] || null,
+      image4_url: galleryImages[2] || null,
       description: productForm.description || '',
       features: [productForm.brand, productForm.category],
       specs: specsObj,
@@ -605,14 +635,35 @@ export default function AdminPage() {
 
     if (isSupabaseConfigured()) {
       try {
-        const { data, error } = editingProduct
-          ? await supabase.from('products').upsert([payload]).select()
-          : await supabase.from('products').insert([payload]).select();
+        const { error } = editingProduct
+          ? await supabase.from('products').upsert([payload])
+          : await supabase.from('products').insert([payload]);
 
         if (error) {
-          console.error('Supabase Product Insert Error:', error);
-          alert(`Failed to save product: ${error.message}`);
-          return;
+          console.warn('Supabase Product Insert Warning with gallery fields, retrying without optional gallery columns:', error.message);
+          const basePayload = {
+            id: productId,
+            name: title,
+            brand: productForm.brand,
+            category: productForm.category,
+            price: price,
+            original_price: Number(productForm.originalPriceLkr) || price,
+            image: imageUrl,
+            description: productForm.description || '',
+            features: [productForm.brand, productForm.category],
+            specs: specsObj,
+            in_stock: stock > 0 && productForm.inStock,
+            warranty: warrantyPeriod,
+            created_at: new Date().toISOString()
+          };
+          const { error: retryErr } = editingProduct
+            ? await supabase.from('products').upsert([basePayload])
+            : await supabase.from('products').insert([basePayload]);
+
+          if (retryErr) {
+            alert(`Failed to save product: ${retryErr.message}`);
+            return;
+          }
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Unknown database error';
@@ -634,6 +685,7 @@ export default function AdminPage() {
         stockCount: stock,
         inStock: stock > 0 && productForm.inStock,
         image: imageUrl,
+        galleryImages,
         badge: productForm.badge || undefined,
         warranty: warrantyPeriod,
         description: productForm.description,
@@ -653,6 +705,7 @@ export default function AdminPage() {
         rating: 5.0,
         reviewsCount: 1,
         image: imageUrl,
+        galleryImages,
         specs: specsObj,
         description: productForm.description,
         tags: [productForm.brand, productForm.category],
@@ -1970,6 +2023,57 @@ export default function AdminPage() {
                     <span>{uploadError}</span>
                   </div>
                 )}
+              </div>
+
+              {/* Additional Gallery Images (Image 2, Image 3, Image 4) */}
+              <div className="space-y-3 pt-3 border-t border-zinc-800">
+                <label className="text-zinc-300 block font-bold">Additional Product Gallery Images (Optional)</label>
+                
+                {[
+                  { label: 'Image 2 (Gallery 1)', key: 'image2' as const, target: 'product_image2' as const },
+                  { label: 'Image 3 (Gallery 2)', key: 'image3' as const, target: 'product_image3' as const },
+                  { label: 'Image 4 (Gallery 3)', key: 'image4' as const, target: 'product_image4' as const }
+                ].map(imgField => (
+                  <div key={imgField.key} className="space-y-1">
+                    <label className="text-zinc-400 text-[11px] block">{imgField.label}</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={productForm[imgField.key]}
+                        onChange={(e) => setProductForm({ ...productForm, [imgField.key]: e.target.value })}
+                        placeholder="https://... image URL or upload file"
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none text-xs font-mono"
+                      />
+                      <label className="px-3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-lime-400 font-bold cursor-pointer flex items-center gap-1 shrink-0 transition-colors">
+                        <Upload className="w-4 h-4" />
+                        <span className="text-[11px]">Upload</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e, imgField.target)}
+                          disabled={uploading}
+                          className="hidden"
+                        />
+                      </label>
+                      {productForm[imgField.key] && (
+                        <button
+                          type="button"
+                          onClick={() => setProductForm({ ...productForm, [imgField.key]: '' })}
+                          className="p-2.5 rounded-xl bg-zinc-900 text-zinc-400 hover:text-rose-400 border border-zinc-800"
+                          title="Clear image"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    {productForm[imgField.key] && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <img src={productForm[imgField.key]} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-zinc-800 shrink-0" />
+                        <span className="text-[10px] text-zinc-500 font-mono truncate max-w-xs">{productForm[imgField.key]}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
 
               <div>

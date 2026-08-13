@@ -86,15 +86,21 @@ export function formatPrice(priceLkr: number): string {
   return `Rs. ${priceLkr.toLocaleString()}`;
 }
 
-export function getProductSlug(product: { id: string; name?: string; title?: string }): string {
-  const text = product.name || product.title || product.id || '';
-  const slug = text
+export function generateSlug(text?: string): string {
+  if (!text) return '';
+  return text
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '');
-  return slug || product.id;
 }
+
+export function getProductSlug(product: { id: string; name?: string; title?: string }): string {
+  const text = product.name || product.title || '';
+  const slug = generateSlug(text);
+  return slug || String(product.id || '');
+}
+
 
 export async function getProductsFromSupabase(): Promise<any[]> {
   try {

@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS public.products (
     price NUMERIC NOT NULL,
     original_price NUMERIC,
     image TEXT NOT NULL,
+    images JSONB DEFAULT '[]'::jsonb,
+    image2_url TEXT,
+    image3_url TEXT,
+    image4_url TEXT,
     description TEXT,
     features JSONB DEFAULT '[]'::jsonb,
     specs JSONB DEFAULT '{}'::jsonb,
@@ -18,6 +22,13 @@ CREATE TABLE IF NOT EXISTS public.products (
     warranty TEXT DEFAULT '1 Year Official Warranty',
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Optional: Alter existing products table if columns do not exist
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image2_url TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image3_url TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image4_url TEXT;
+
 
 -- 2. ORDERS TABLE
 CREATE TABLE IF NOT EXISTS public.orders (

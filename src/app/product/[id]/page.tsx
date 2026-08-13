@@ -5,7 +5,7 @@ import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { getStoredProducts } from '@/lib/storeManager';
 import { Product } from '@/types';
-import { formatPrice, getProductSlug } from '@/lib/productsData';
+import { formatPrice, getProductSlug, generateSlug } from '@/lib/productsData';
 import { useCart } from '@/context/CartContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Navbar } from '@/components/Navbar';
@@ -91,6 +91,25 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     const stockCount = Number(data.stock || data.stock_count) || 10;
     const inStock = data.in_stock !== undefined ? Boolean(data.in_stock) : stockCount > 0;
 
+    const galleryCols = [
+      data.image2_url || data.image2,
+      data.image3_url || data.image3,
+      data.image4_url || data.image4
+    ].filter(Boolean);
+
+    let galleryArr: string[] = [];
+    if (Array.isArray(data.gallery_images)) galleryArr = data.gallery_images;
+    else if (Array.isArray(data.galleryImages)) galleryArr = data.galleryImages;
+    else if (Array.isArray(data.images)) galleryArr = data.images;
+    else if (typeof data.gallery_images === 'string') {
+      try { galleryArr = JSON.parse(data.gallery_images); } catch {}
+    } else if (typeof data.images === 'string') {
+      try { galleryArr = JSON.parse(data.images); } catch {}
+    }
+
+    const galleryImages = Array.from(new Set([...galleryArr, ...galleryCols]))
+      .filter((img): img is string => typeof img === 'string' && img.trim().length > 0 && img !== imageUrl);
+
     return {
       id: String(data.id),
       name: title,
@@ -102,6 +121,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       rating: Number(data.rating) || 0,
       reviewsCount: Number(data.reviews_count) || 0,
       image: imageUrl,
+      galleryImages,
       specs: data.specs || {},
       description,
       tags: data.features || data.tags || [],
@@ -115,13 +135,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   useEffect(() => {
     async function loadProduct() {
-      const matchProduct = (p: Product) => (
-        p.id === id ||
-        getProductSlug(p) === id ||
-        (p.name && getProductSlug({ id: p.id, name: p.name }) === id)
-      );
+      const matchProduct = (p: Product) => {
+        if (!p) return false;
+        const target = id;
+        const pIdStr = String(p.id);
+        const pTitle = p.name || (p as any).title || '';
+        const slugifiedTitle = generateSlug(pTitle);
 
-      // 1. Try fetching directly from Supabase single item query by ID or Name
+        return (
+          pIdStr === target ||
+          slugifiedTitle === target ||
+          slugifiedTitle === generateSlug(target) ||
+          getProductSlug(p) === target ||
+          (p.name && getProductSlug({ id: p.id, name: p.name }) === target)
+        );
+      };
+
+      // 1. Try fetching directly from Supabase single item query by ID
       if (isSupabaseConfigured()) {
         try {
           const { data, error } = await supabase
@@ -141,7 +171,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           console.warn('[Product Detail] Single item ID fetch failed, trying slug match:', e);
         }
 
-        // 2. Query all products from Supabase and match by slug or ID
+        // 2. Query all products from Supabase and match by slugified title or ID
         try {
           const { data, error } = await supabase.from('products').select('*');
           if (!error && data && data.length > 0) {
@@ -161,15 +191,15 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         }
       }
 
-      // 3. Final fallback: Local storage cache
+      // 3. Final fallback: Check local storage cache before showing "Product Not Found"
       const productsList = getStoredProducts();
-      setAllProducts(productsList);
+      setAllProducts(prev => (prev.length > 0 ? prev : productsList));
 
-      const found = productsList.find(matchProduct);
-      if (found) {
-        setProduct(found);
-        setSelectedImage(found.image);
-        fetchApprovedReviews(found.id);
+      const foundInCache = productsList.find(matchProduct);
+      if (foundInCache) {
+        setProduct(foundInCache);
+        setSelectedImage(foundInCache.image);
+        fetchApprovedReviews(foundInCache.id);
       }
     }
 
@@ -296,19 +326,28 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             </div>
 
             {/* Thumbnail Carousel */}
-            {product.galleryImages && product.galleryImages.length > 0 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-2">
-                {[product.image, ...product.galleryImages].map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedImage(img)}
-                    className={`w-20 h-20 rounded-2xl overflow-hidden border-2 shrink-0 p-1 bg-[#0a0c10] transition-all ${selectedImage === img ? 'border-lime-400 scale-105' : 'border-zinc-800 opacity-60 hover:opacity-100'}`}
-                  >
-                    <img src={img} alt="Thumbnail" className="w-full h-full object-cover rounded-xl" />
-                  </button>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const allImages = Array.from(new Set([product.image, ...(product.galleryImages || [])].filter(Boolean)));
+              if (allImages.length <= 1) return null;
+
+              return (
+                <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                  {allImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedImage(img)}
+                      className={`w-20 h-20 rounded-2xl overflow-hidden border-2 shrink-0 p-1 bg-[#0a0c10] transition-all cursor-pointer ${
+                        selectedImage === img
+                          ? 'border-lime-400 scale-105 shadow-md shadow-lime-400/20'
+                          : 'border-zinc-800 opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover rounded-xl" />
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right Column: Info & Actions */}
