@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { Category } from '@/types';
 import { getDynamicCategories, getStoredSiteLogo, syncSiteLogoFromSupabase, cleanLogoUrl } from '@/lib/storeManager';
+import { normalizeCategory, isCategoryMatch } from '@/lib/productsData';
 import { ShoppingBag, Bot, Shield, Search, Menu, X, MessageSquare, User, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
 
 export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selectedCategory }: {
@@ -20,13 +21,13 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [siteLogo, setSiteLogo] = useState<string>('');
+  const [siteLogo, setSiteLogo] = useState<string>(() => cleanLogoUrl(getStoredSiteLogo()));
   const [logoError, setLogoError] = useState<boolean>(false);
 
   const loadLogo = async () => {
-    const cached = getStoredSiteLogo();
+    const cached = cleanLogoUrl(getStoredSiteLogo());
     if (cached) {
-      setSiteLogo(cleanLogoUrl(cached));
+      setSiteLogo(cached);
       setLogoError(false);
     }
 
@@ -83,14 +84,14 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
   };
 
-  // Re-check and sync site logo & categories whenever pathname changes
+  // Sync categories on route changes (logo is hydrated once on mount & via events)
   useEffect(() => {
-    loadLogo();
     syncCategories();
   }, [pathname]);
 
-  // Initial Auth check & global event listeners (without path polling loops)
+  // Initial Auth check, Logo fetch on mount & global event listeners
   useEffect(() => {
+    loadLogo();
     checkAdminAuth();
 
     const handleAuthChanged = () => checkAdminAuth(true);
@@ -283,7 +284,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
           <button
             onClick={() => onSelectCategory && onSelectCategory('all')}
             className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition-colors ${
-              !selectedCategory || selectedCategory === 'all'
+              !selectedCategory || normalizeCategory(selectedCategory) === 'all'
                 ? 'bg-lime-400 text-slate-950 font-bold'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
@@ -295,7 +296,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
               key={cat.id}
               onClick={() => onSelectCategory && onSelectCategory(cat.id)}
               className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition-colors ${
-                selectedCategory === cat.id
+                isCategoryMatch(selectedCategory, cat.id)
                   ? 'bg-lime-400 text-slate-950 font-bold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
               }`}

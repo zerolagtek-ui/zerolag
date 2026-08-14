@@ -3,21 +3,19 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { Shield, Truck, CreditCard, Clock, Phone, Mail, Award } from 'lucide-react';
 import { CATEGORIES } from '@/lib/productsData';
 import { getStoredSiteLogo, syncSiteLogoFromSupabase, cleanLogoUrl } from '@/lib/storeManager';
 
 export function Footer() {
-  const pathname = usePathname();
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
-  const [siteLogo, setSiteLogo] = useState<string>('');
+  const [siteLogo, setSiteLogo] = useState<string>(() => cleanLogoUrl(getStoredSiteLogo()));
   const [logoError, setLogoError] = useState<boolean>(false);
 
   const loadLogo = async () => {
-    const cached = getStoredSiteLogo();
+    const cached = cleanLogoUrl(getStoredSiteLogo());
     if (cached) {
-      setSiteLogo(cleanLogoUrl(cached));
+      setSiteLogo(cached);
       setLogoError(false);
     }
 
@@ -29,13 +27,9 @@ export function Footer() {
     }
   };
 
-  // Re-check and sync site logo whenever pathname changes
+  // Initial logo sync on mount & event listeners setup
   useEffect(() => {
     loadLogo();
-  }, [pathname]);
-
-  // Initial event listeners setup
-  useEffect(() => {
     window.addEventListener('zerolag-logo-updated', loadLogo);
     window.addEventListener('site_logo_updated', loadLogo);
     return () => {
@@ -123,10 +117,10 @@ export function Footer() {
                 <Phone className="w-4 h-4 text-lime-400 shrink-0" />
                 <span>Hotline: +{whatsappNumber}</span>
               </p>
-              <p className="flex items-center gap-2">
+              <a href="mailto:hello@zerolagtek.app" className="flex items-center gap-2 hover:text-white transition-colors">
                 <Mail className="w-4 h-4 text-lime-400 shrink-0" />
-                <span>sales@zerolag.lk</span>
-              </p>
+                <span>hello@zerolagtek.app</span>
+              </a>
             </div>
           </div>
 

@@ -436,9 +436,14 @@ export function getStoredSiteLogo(): string {
   }
 }
 
+let activeLogoPromise: Promise<string> | null = null;
+let inMemoryLogoCache: { value: string; timestamp: number } | null = null;
+
 export function saveSiteLogo(logoUrl: string): void {
   if (typeof window === 'undefined') return;
   const cleaned = cleanLogoUrl(logoUrl);
+  inMemoryLogoCache = { value: cleaned, timestamp: Date.now() };
+
   try {
     localStorage.setItem(LOGO_STORAGE_KEY, cleaned);
     localStorage.setItem('site_logo_url', cleaned);
@@ -448,36 +453,56 @@ export function saveSiteLogo(logoUrl: string): void {
     console.error('Error saving site logo to localStorage:', e);
   }
 
-  if (typeof window !== 'undefined') {
-    fetch('/api/site-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'site_logo_url', value: cleaned })
-    }).catch(err => console.error('[Site Logo API Save Error]:', err));
-  }
+  fetch('/api/site-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'site_logo_url', value: cleaned })
+  }).catch(() => {
+    // Silently ignore offline network save failures
+  });
 }
 
 export async function syncSiteLogoFromDatabase(): Promise<string> {
   const localLogo = getStoredSiteLogo();
   if (typeof window === 'undefined') return localLogo;
 
-  try {
-    const res = await fetch('/api/site-settings?key=site_logo_url');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.value) {
-        const cleaned = cleanLogoUrl(data.value);
-        localStorage.setItem(LOGO_STORAGE_KEY, cleaned);
-        localStorage.setItem('site_logo_url', cleaned);
-        window.dispatchEvent(new Event('zerolag-logo-updated'));
-        window.dispatchEvent(new Event('site_logo_updated'));
-        return cleaned;
-      }
-    }
-  } catch (err) {
-    console.warn('[Site Logo API Sync Warning]:', err);
+  const now = Date.now();
+  if (inMemoryLogoCache && now - inMemoryLogoCache.timestamp < 300000) {
+    return inMemoryLogoCache.value || localLogo;
   }
-  return localLogo;
+
+  if (activeLogoPromise) {
+    return activeLogoPromise;
+  }
+
+  activeLogoPromise = (async () => {
+    try {
+      const res = await fetch('/api/site-settings?key=site_logo_url');
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.success && data.value) {
+          const cleaned = cleanLogoUrl(data.value);
+          inMemoryLogoCache = { value: cleaned, timestamp: Date.now() };
+
+          const currentLocal = localStorage.getItem('site_logo_url') || '';
+          if (currentLocal !== cleaned) {
+            localStorage.setItem(LOGO_STORAGE_KEY, cleaned);
+            localStorage.setItem('site_logo_url', cleaned);
+            window.dispatchEvent(new Event('zerolag-logo-updated'));
+            window.dispatchEvent(new Event('site_logo_updated'));
+          }
+          return cleaned;
+        }
+      }
+    } catch {
+      // Silently catch fetch errors (offline / dev server restart) without logging warning traces to console
+    } finally {
+      activeLogoPromise = null;
+    }
+    return localLogo;
+  })();
+
+  return activeLogoPromise;
 }
 
 export const syncSiteLogoFromSupabase = syncSiteLogoFromDatabase;

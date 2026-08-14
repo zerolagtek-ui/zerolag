@@ -95,6 +95,33 @@ export function generateSlug(text?: string): string {
     .replace(/(^-|-$)+/g, '');
 }
 
+export function normalizeCategory(cat?: string): string {
+  if (!cat) return 'all';
+  const slug = generateSlug(cat);
+
+  if (!slug || slug === 'all' || slug === 'all-categories' || slug === 'all-hardware') return 'all';
+
+  if (slug.includes('mice') || slug.includes('mouse')) return 'gaming-mice';
+  if (slug.includes('keyboard')) return 'keyboards';
+  if (slug.includes('controller') || slug.includes('gamepad')) return 'controllers';
+  if (slug.includes('audio') || slug.includes('headset') || slug.includes('headphone')) return 'audio';
+  if (slug.includes('speaker') || slug.includes('soundbar')) return 'speakers';
+  if (slug.includes('webcam') || slug.includes('camera') || slug.includes('streaming')) return 'webcams';
+  if (slug.includes('network') || slug.includes('wifi') || slug.includes('router')) return 'networking';
+  if (slug.includes('hub') || slug.includes('adapter') || slug.includes('dock')) return 'hubs-adapters';
+  if (slug.includes('charger') || slug.includes('power') || slug.includes('battery') || slug.includes('charging')) return 'power-charging';
+  if (slug.includes('storage') || slug.includes('ssd') || slug.includes('nvme') || slug.includes('drive')) return 'storage';
+
+  return slug;
+}
+
+export function isCategoryMatch(productCategory?: string, targetCategory?: string): boolean {
+  const normTarget = normalizeCategory(targetCategory);
+  if (normTarget === 'all') return true;
+  const normProduct = normalizeCategory(productCategory);
+  return normProduct === normTarget;
+}
+
 export function getProductSlug(product: { id: string; name?: string; title?: string }): string {
   const text = product.name || product.title || '';
   const slug = generateSlug(text);

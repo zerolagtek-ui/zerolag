@@ -9,7 +9,7 @@ import { PayHereCheckoutModal } from '@/components/PayHereCheckoutModal';
 import { AiAssistantDrawer } from '@/components/AiAssistantDrawer';
 import { Footer } from '@/components/Footer';
 import { getProductsFromSupabase } from '@/lib/productsData';
-import { syncHeroSlidesFromSupabase } from '@/lib/storeManager';
+import { syncHeroSlidesFromSupabase, getStoredProducts } from '@/lib/storeManager';
 import { Product } from '@/types';
 
 export default function Home() {
@@ -20,6 +20,10 @@ export default function Home() {
 
   useEffect(() => {
     async function loadData() {
+      const stored = getStoredProducts();
+      if (stored && stored.length > 0) {
+        setProducts(stored);
+      }
       try {
         await syncHeroSlidesFromSupabase();
         const fetched = await getProductsFromSupabase();
@@ -27,7 +31,7 @@ export default function Home() {
           setProducts(fetched);
         }
       } catch (err) {
-        console.error('[Home Page] Failed to fetch data from Supabase:', err);
+        console.error('[Home Page] Failed to fetch data:', err);
       }
     }
     loadData();

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ProductCard } from './ProductCard';
 import { Product, Category } from '@/types';
 import { getStoredProducts, getDynamicCategories, syncProductsFromSupabase } from '@/lib/storeManager';
-import { getProductsFromSupabase } from '@/lib/productsData';
+import { getProductsFromSupabase, isCategoryMatch, normalizeCategory } from '@/lib/productsData';
 import { Cpu, Search, SlidersHorizontal, Check, RefreshCw, Loader2, PackageCheck, PackageX } from 'lucide-react';
 
 export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCategory, initialProducts }: {
@@ -91,9 +91,9 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
     if (onSelectCategory) onSelectCategory(catId);
   };
 
-  // Filter and sort logic
+  // Filter and sort logic with robust category normalization
   const filteredProducts = products.filter((product) => {
-    if (selectedCategory !== 'all' && product.category !== selectedCategory) return false;
+    if (selectedCategory !== 'all' && !isCategoryMatch(product.category, selectedCategory)) return false;
     if (inStockOnly && !product.inStock) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -140,6 +140,8 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
     return () => observer.disconnect();
   }, [hasMore, isLoadingMore]);
 
+  const activeNormCategory = normalizeCategory(selectedCategory);
+
   return (
     <section id="catalog" className="py-12 bg-black text-white transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -166,7 +168,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
           <button
             onClick={() => handleCategoryClick('all')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all border whitespace-nowrap ${
-              selectedCategory === 'all'
+              activeNormCategory === 'all'
                 ? 'bg-lime-400 text-slate-950 border-lime-400 shadow-md shadow-lime-400/20'
                 : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
             }`}
@@ -175,13 +177,15 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
           </button>
 
           {categories.map((cat) => {
-            const count = products.filter(p => p.category === cat.id).length;
+            const count = products.filter(p => isCategoryMatch(p.category, cat.id)).length;
+            const catNorm = normalizeCategory(cat.id);
+            const isSelected = activeNormCategory === catNorm;
             return (
               <button
                 key={cat.id}
                 onClick={() => handleCategoryClick(cat.id)}
                 className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all border whitespace-nowrap flex items-center gap-1.5 ${
-                  selectedCategory === cat.id
+                  isSelected
                     ? 'bg-lime-400 text-slate-950 border-lime-400 shadow-md shadow-lime-400/20'
                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
                 }`}
