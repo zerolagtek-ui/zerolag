@@ -13,9 +13,17 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
   onSelectCategory?: (catId: string) => void;
   initialProducts?: Product[];
 }) {
-  const [products, setProducts] = useState<Product[]>(initialProducts || []);
-  const [categories, setCategories] = useState<Category[]>([]);
-  
+  const [hasMounted, setHasMounted] = useState(false);
+  const [products, setProducts] = useState<Product[]>(() => {
+    if (initialProducts && initialProducts.length > 0) return initialProducts;
+    return getStoredProducts() || [];
+  });
+  const [categories, setCategories] = useState<Category[]>(() => getDynamicCategories() || []);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
   // Filtering states
   const [selectedCategory, setSelectedCategory] = useState(externalCategory || 'all');
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery || '');
@@ -65,11 +73,16 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
       setCategories(getDynamicCategories());
     };
 
-    window.addEventListener('zerolag-products-updated', handleUpdate);
-    window.addEventListener('zerolag-categories-updated', handleUpdate);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('zerolag-products-updated', handleUpdate);
+      window.addEventListener('zerolag-categories-updated', handleUpdate);
+    }
+
     return () => {
-      window.removeEventListener('zerolag-products-updated', handleUpdate);
-      window.removeEventListener('zerolag-categories-updated', handleUpdate);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('zerolag-products-updated', handleUpdate);
+        window.removeEventListener('zerolag-categories-updated', handleUpdate);
+      }
     };
   }, []);
 
@@ -125,12 +138,13 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
   // IntersectionObserver for seamless Infinite Scroll
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
     const target = observerRef.current;
     if (!target) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+        if (entries[0] && entries[0].isIntersecting && hasMore && !isLoadingMore) {
           handleLoadMore();
         }
       },

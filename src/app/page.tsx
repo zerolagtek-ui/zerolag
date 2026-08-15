@@ -14,15 +14,21 @@ import { syncHeroSlidesFromSupabase, getStoredProducts } from '@/lib/storeManage
 import { Product } from '@/types';
 
 function HomeContent() {
+  const [hasMounted, setHasMounted] = useState(false);
   const searchParams = useSearchParams();
-  const initialSearchParam = searchParams.get('search') || '';
+  const initialSearchParam = searchParams ? (searchParams.get('search') || '') : '';
 
   const [searchQuery, setSearchQuery] = useState(initialSearchParam);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => getStoredProducts() || []);
 
   useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!searchParams) return;
     const q = searchParams.get('search');
     if (q !== null) {
       setSearchQuery(q);
@@ -88,7 +94,16 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center font-mono text-xs">Loading ZeroLag Catalog...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col justify-between bg-black text-white overflow-x-hidden">
+        <Navbar />
+        <main className="flex-1">
+          <HeroBanner />
+          <ProductGrid />
+        </main>
+        <Footer />
+      </div>
+    }>
       <HomeContent />
     </Suspense>
   );

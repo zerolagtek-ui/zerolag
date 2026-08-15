@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Product } from '@/types';
 import { useCart } from '@/context/CartContext';
 import { formatPrice, getProductSlug } from '@/lib/productsData';
+import Image from 'next/image';
 import { Star, ShoppingCart, Eye, ShieldCheck } from 'lucide-react';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
@@ -54,16 +55,18 @@ export function ProductCard({ product }: { product: Product }) {
         href={`/product/${productSlug}`}
         className="relative h-32 sm:h-48 w-full rounded-xl overflow-hidden bg-zinc-950 mb-2 sm:mb-4 flex items-center justify-center cursor-pointer group/img block"
       >
-        <img
+        <Image
           src={imgSrc}
           alt={product.name}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          unoptimized
           onError={() => {
             if (imgSrc !== FALLBACK_IMAGE) {
               setImgSrc(FALLBACK_IMAGE);
             }
           }}
-          className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
-          loading="lazy"
+          className="object-cover group-hover/img:scale-105 transition-transform duration-500"
         />
 
         <div className="absolute inset-0 bg-slate-950/60 opacity-0 sm:group-hover/img:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">

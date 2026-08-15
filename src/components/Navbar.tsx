@@ -84,11 +84,11 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   };
 
   const checkAdminAuth = async (forceFetch = false) => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
 
     const hasLocalAuthFlag = sessionStorage.getItem('zerolag_admin_auth') === 'true';
 
-    if (!hasLocalAuthFlag && !pathname.startsWith('/admin') && !forceFetch) {
+    if (!hasLocalAuthFlag && (!pathname || !pathname.startsWith('/admin')) && !forceFetch) {
       setIsAdminLoggedIn(false);
       return;
     }
@@ -99,14 +99,20 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
 
       if (res.ok && data.authenticated) {
         setIsAdminLoggedIn(true);
-        sessionStorage.setItem('zerolag_admin_auth', 'true');
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('zerolag_admin_auth', 'true');
+        }
       } else {
         setIsAdminLoggedIn(false);
-        sessionStorage.removeItem('zerolag_admin_auth');
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('zerolag_admin_auth');
+        }
       }
     } catch {
       setIsAdminLoggedIn(false);
-      sessionStorage.removeItem('zerolag_admin_auth');
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('zerolag_admin_auth');
+      }
     }
   };
 
@@ -117,9 +123,13 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     } catch (e) {
       console.warn('Logout error:', e);
     }
-    sessionStorage.removeItem('zerolag_admin_auth');
-    setIsAdminLoggedIn(false);
-    window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
+    if (typeof window !== 'undefined') {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('zerolag_admin_auth');
+      }
+      setIsAdminLoggedIn(false);
+      window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
+    }
   };
 
   // Sync categories on route changes
@@ -135,23 +145,29 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
 
     const handleAuthChanged = () => checkAdminAuth(true);
 
-    window.addEventListener('zerolag-categories-updated', syncCategories);
-    window.addEventListener('zerolag-products-updated', loadProducts);
-    window.addEventListener('zerolag-admin-auth-changed', handleAuthChanged);
-    window.addEventListener('zerolag-logo-updated', loadLogo);
-    window.addEventListener('site_logo_updated', loadLogo);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('zerolag-categories-updated', syncCategories);
+      window.addEventListener('zerolag-products-updated', loadProducts);
+      window.addEventListener('zerolag-admin-auth-changed', handleAuthChanged);
+      window.addEventListener('zerolag-logo-updated', loadLogo);
+      window.addEventListener('site_logo_updated', loadLogo);
+    }
 
     return () => {
-      window.removeEventListener('zerolag-categories-updated', syncCategories);
-      window.removeEventListener('zerolag-products-updated', loadProducts);
-      window.removeEventListener('zerolag-admin-auth-changed', handleAuthChanged);
-      window.removeEventListener('zerolag-logo-updated', loadLogo);
-      window.removeEventListener('site_logo_updated', loadLogo);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('zerolag-categories-updated', syncCategories);
+        window.removeEventListener('zerolag-products-updated', loadProducts);
+        window.removeEventListener('zerolag-admin-auth-changed', handleAuthChanged);
+        window.removeEventListener('zerolag-logo-updated', loadLogo);
+        window.removeEventListener('site_logo_updated', loadLogo);
+      }
     };
   }, []);
 
   // Close autocomplete on click outside or Escape key
   useEffect(() => {
+    if (typeof document === 'undefined') return;
+
     function handleClickOutside(event: MouseEvent) {
       if (
         desktopSearchRef.current &&
