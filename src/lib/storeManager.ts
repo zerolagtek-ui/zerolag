@@ -235,6 +235,21 @@ export function updateOrderStatus(orderId: string, status: OrderDetails['orderSt
   return updated;
 }
 
+export function updateOrderPaymentStatus(orderId: string, paymentStatus: OrderDetails['paymentStatus']): OrderDetails[] {
+  const orders = getStoredOrders();
+  const updated = orders.map(o => {
+    if (o.id === orderId) {
+      return {
+        ...o,
+        paymentStatus
+      };
+    }
+    return o;
+  });
+  saveOrders(updated);
+  return updated;
+}
+
 // Bank Account Store API
 let activeBankPromise: Promise<BankAccountDetails> | null = null;
 

@@ -2,9 +2,19 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import OrderModel from '@/lib/models/Order';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await connectToDatabase();
+    const { searchParams } = new URL(request.url);
+    const orderId = searchParams.get('order_id');
+
+    if (orderId) {
+      const order = await OrderModel.findOne({ id: orderId }).lean();
+      if (order) {
+        return NextResponse.json({ success: true, order });
+      }
+    }
+
     const orders = await OrderModel.find({}).sort({ created_at: -1 }).lean();
     return NextResponse.json({ success: true, orders });
   } catch (error) {

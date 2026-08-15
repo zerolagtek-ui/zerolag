@@ -4,10 +4,16 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/lib/productsData';
-import { addStoredOrder, getStoredShippingRates, syncShippingRatesFromDatabase } from '@/lib/storeManager';
-import { preparePayHereForm, loadPayHereSDK } from '@/lib/payhere';
-import { PaymentMethod, ShippingOption } from '@/types';
-import { ShieldCheck, Truck, Lock, ArrowLeft, CheckCircle2, ShoppingBag, AlertCircle } from 'lucide-react';
+import {
+  addStoredOrder,
+  getStoredOrders,
+  updateOrderPaymentStatus,
+  getStoredShippingRates,
+  syncShippingRatesFromDatabase
+} from '@/lib/storeManager';
+import { preparePayHereForm, submitPayHereForm } from '@/lib/payhere';
+import { OrderDetails, PaymentMethod, ShippingOption } from '@/types';
+import { ShieldCheck, Truck, Lock, ArrowLeft, CheckCircle2, ShoppingBag, AlertCircle, Printer } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function CheckoutPage() {
@@ -17,8 +23,71 @@ export default function CheckoutPage() {
   const [selectedShippingId, setSelectedShippingId] = useState<string>('trans-express');
   const [paymentError, setPaymentError] = useState('');
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [confirmedOrderId, setConfirmedOrderId] = useState('');
+  const [confirmedOrderDetails, setConfirmedOrderDetails] = useState<OrderDetails | null>(null);
+
   useEffect(() => {
-    async function loadShippingRates() {
+    async function initCheckoutPage() {
+      // 1. Check for order_id in query parameters from PayHere return_url redirect
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderIdParam = urlParams.get('order_id');
+        if (orderIdParam) {
+          clearCart();
+          setConfirmedOrderId(orderIdParam);
+
+          let matchedOrder = getStoredOrders().find(o => o.id === orderIdParam);
+          if (!matchedOrder) {
+            try {
+              const res = await fetch(`/api/orders?order_id=${encodeURIComponent(orderIdParam)}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data.order) {
+                  matchedOrder = {
+                    id: data.order.id,
+                    customerName: data.order.customer_name,
+                    email: data.order.customer_email,
+                    phone: data.order.customer_phone,
+                    address: data.order.shipping_address,
+                    city: 'Colombo',
+                    postalCode: '',
+                    paymentMethod: data.order.payment_method || 'payhere',
+                    shippingMethod: data.order.shipping_method || 'Trans Express',
+                    shippingFee: data.order.shipping_fee || 0,
+                    paymentStatus: 'Paid',
+                    orderStatus: data.order.status || 'Pending',
+                    items: data.order.items || [],
+                    subtotalLkr: data.order.subtotal || 0,
+                    discountLkr: 0,
+                    shippingLkr: data.order.shipping_fee || 0,
+                    totalLkr: data.order.total_amount || 0,
+                    createdAt: data.order.created_at || new Date().toISOString()
+                  };
+                }
+              }
+            } catch (err) {
+              console.error('Failed to fetch order details:', err);
+            }
+          }
+
+          if (matchedOrder) {
+            matchedOrder.paymentStatus = 'Paid';
+            updateOrderPaymentStatus(orderIdParam, 'Paid');
+            setConfirmedOrderDetails(matchedOrder);
+          }
+
+          setOrderConfirmed(true);
+          confetti({
+            particleCount: 120,
+            spread: 80,
+            origin: { y: 0.5 },
+          });
+        }
+      }
+
+      // 2. Load Shipping Rates
       const cached = getStoredShippingRates();
       const activeCached = cached.filter(s => s.enabled);
       setShippingOptions(activeCached.length > 0 ? activeCached : cached);
@@ -35,8 +104,8 @@ export default function CheckoutPage() {
         }
       }
     }
-    loadShippingRates();
-    loadPayHereSDK().catch(() => {});
+
+    initCheckoutPage();
   }, []);
 
   const activeShipping = shippingOptions.find(s => s.id === selectedShippingId) || shippingOptions[0] || {
@@ -62,10 +131,6 @@ export default function CheckoutPage() {
     paymentMethod: 'bank-transfer' as PaymentMethod,
   });
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [orderConfirmed, setOrderConfirmed] = useState(false);
-  const [confirmedOrderId, setConfirmedOrderId] = useState('');
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     if (paymentError) setPaymentError('');
@@ -80,7 +145,7 @@ export default function CheckoutPage() {
     const generatedOrderId = `ZLAG-${Math.floor(100000 + Math.random() * 900000)}`;
     const fullName = `${formData.firstName} ${formData.lastName}`.trim() || 'Valued Customer';
 
-    const newOrderPayload = {
+    const newOrderPayload: OrderDetails = {
       id: generatedOrderId,
       customerName: fullName,
       email: formData.email,
@@ -121,10 +186,9 @@ export default function CheckoutPage() {
       orderDate: new Date().toISOString(),
     };
 
-    // PayHere Gateway Sandbox Integration
+    // PayHere Gateway Integration (Direct HTML Form POST Submission)
     if (formData.paymentMethod === 'payhere') {
       try {
-        await loadPayHereSDK();
         const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
 
         const hashRes = await fetch('/api/payhere/hash', {
@@ -138,54 +202,25 @@ export default function CheckoutPage() {
         });
 
         const hashData = await hashRes.json();
-        if (!hashRes.ok || !hashData.success) {
-          throw new Error(hashData.error || 'Failed to generate PayHere payment hash');
+        if (!hashRes.ok || !hashData.hash) {
+          throw new Error(hashData.message || hashData.error || 'Failed to generate PayHere payment hash');
         }
+
+        addStoredOrder(newOrderPayload);
+        fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailPayload),
+        }).catch(() => {});
+        clearCart();
 
         const payhereParams = preparePayHereForm(newOrderPayload, originUrl, hashData.hash);
-
-        const winAny = window as any;
-        if (winAny.payhere) {
-          winAny.payhere.onCompleted = function onCompleted(orderId: string) {
-            const completedPayload = {
-              ...newOrderPayload,
-              paymentStatus: 'Paid' as const,
-              paymentMethod: 'payhere' as const
-            };
-            addStoredOrder(completedPayload);
-            fetch('/api/send-order-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(emailPayload)
-            }).catch(() => {});
-
-            setConfirmedOrderId(orderId || generatedOrderId);
-            setOrderConfirmed(true);
-            setIsSubmitting(false);
-            confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
-            clearCart();
-          };
-
-          winAny.payhere.onDismissed = function onDismissed() {
-            setIsSubmitting(false);
-            setPaymentError('PayHere payment window was closed before completion. Please try again or select another payment option.');
-          };
-
-          winAny.payhere.onError = function onError(error: string) {
-            console.error('PayHere Gateway Error:', error);
-            setIsSubmitting(false);
-            setPaymentError(`PayHere Payment Error: ${error || 'Transaction failed'}. Please try again.`);
-          };
-
-          winAny.payhere.startPayment(payhereParams);
-          return;
-        } else {
-          throw new Error('PayHere SDK is not loaded properly.');
-        }
+        submitPayHereForm(payhereParams);
+        return;
       } catch (err: any) {
-        console.error('PayHere init failed:', err);
+        console.error('PayHere execution error:', err);
+        setPaymentError(err.message || 'PayHere payment initialization failed.');
         setIsSubmitting(false);
-        setPaymentError('Failed to load PayHere Gateway script. If you are using an AdBlocker or Brave Shields, please disable it for this site or select Bank Transfer / COD.');
         return;
       }
     }
@@ -201,6 +236,7 @@ export default function CheckoutPage() {
     setTimeout(() => {
       setIsSubmitting(false);
       setConfirmedOrderId(generatedOrderId);
+      setConfirmedOrderDetails(newOrderPayload);
       setOrderConfirmed(true);
       confetti({
         particleCount: 120,
@@ -213,40 +249,101 @@ export default function CheckoutPage() {
 
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
   const whatsappSlipUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-    `Hello ZeroLag Tek! Here is my payment receipt for Order #${confirmedOrderId} (${activeShipping.name} - ${formatPrice(shippingFee)})`
+    `Hello ZeroLag Tek! Here is my payment receipt for Order #${confirmedOrderId} (${confirmedOrderDetails?.shippingMethod || activeShipping.name} - ${formatPrice(confirmedOrderDetails?.shippingLkr || shippingFee)})`
   )}`;
 
   if (orderConfirmed) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-[#0a0c10] border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 sm:p-6 py-12">
+        <div className="max-w-xl w-full bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
           <div className="w-16 h-16 rounded-full bg-lime-400/20 text-lime-400 border border-lime-400/40 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-10 h-10 animate-bounce" />
           </div>
-          <div>
+          
+          <div className="text-center">
             <h1 className="text-2xl font-extrabold text-white">ORDER CONFIRMED!</h1>
             <p className="text-xs font-mono text-zinc-400 mt-1">Order Reference: <span className="text-lime-400 font-bold">#{confirmedOrderId}</span></p>
+            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-mono font-bold">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>PAID VIA PAYHERE GATEWAY</span>
+            </div>
           </div>
-          <p className="text-xs text-zinc-300 font-sans leading-relaxed">
-            Thank you for shopping with ZeroLag Tek Store! An order confirmation receipt has been sent to your email.
+
+          <p className="text-xs text-zinc-300 font-sans text-center leading-relaxed">
+            Thank you for shopping with ZeroLag Tek Store! Your order has been placed and payment confirmed. An order receipt has been sent to your email.
           </p>
 
+          {/* Receipt Breakdown */}
+          {confirmedOrderDetails && (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4 text-xs font-mono">
+              <h3 className="font-bold text-white uppercase text-xs border-b border-zinc-800 pb-2 flex items-center justify-between">
+                <span>Receipt Breakdown</span>
+                <span className="text-zinc-500 font-normal">{new Date(confirmedOrderDetails.createdAt || Date.now()).toLocaleDateString()}</span>
+              </h3>
+
+              {/* Items List */}
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {confirmedOrderDetails.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-zinc-300 text-[11px]">
+                    <span className="truncate pr-2">{item.product.name} (x{item.quantity})</span>
+                    <span className="text-lime-400 font-bold shrink-0">{formatPrice(item.product.priceLkr * item.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totals */}
+              <div className="pt-3 border-t border-zinc-800 space-y-1.5 text-zinc-400 text-[11px]">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span className="text-white">{formatPrice(confirmedOrderDetails.subtotalLkr)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Shipping ({confirmedOrderDetails.shippingMethod})</span>
+                  <span className="text-lime-400 font-bold">{formatPrice(confirmedOrderDetails.shippingLkr)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-white font-extrabold pt-2 border-t border-zinc-800">
+                  <span>Total Amount Paid</span>
+                  <span className="text-lime-400">{formatPrice(confirmedOrderDetails.totalLkr)}</span>
+                </div>
+              </div>
+
+              {/* Customer Info */}
+              <div className="pt-3 border-t border-zinc-800 text-[11px] text-zinc-400 space-y-1">
+                <p><span className="text-zinc-500">Customer:</span> {confirmedOrderDetails.customerName}</p>
+                <p><span className="text-zinc-500">Deliver To:</span> {confirmedOrderDetails.address}, {confirmedOrderDetails.city}</p>
+                {confirmedOrderDetails.phone && <p><span className="text-zinc-500">Phone:</span> {confirmedOrderDetails.phone}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <div className="pt-2 space-y-3">
             <a
               href={whatsappSlipUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-3 px-4 rounded-xl bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 hover:bg-emerald-400 transition-colors font-mono"
+              className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 hover:bg-emerald-400 transition-colors font-mono"
             >
               <span>SEND WHATSAPP RECEIPT (+94741117981)</span>
             </a>
 
-            <Link
-              href="/"
-              className="w-full py-3 px-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold text-xs flex items-center justify-center gap-2 hover:text-lime-400 transition-colors font-mono block"
-            >
-              <span>RETURN TO STOREFRONT</span>
-            </Link>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => typeof window !== 'undefined' && window.print()}
+                className="py-3 px-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold text-xs flex items-center justify-center gap-2 hover:text-lime-400 transition-colors font-mono cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>PRINT RECEIPT</span>
+              </button>
+
+              <Link
+                href="/"
+                className="py-3 px-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold text-xs flex items-center justify-center gap-2 hover:text-lime-400 transition-colors font-mono block text-center"
+              >
+                <span>STOREFRONT</span>
+              </Link>
+            </div>
           </div>
         </div>
       </div>

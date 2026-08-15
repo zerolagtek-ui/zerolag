@@ -105,7 +105,7 @@ export function preparePayHereForm(orderDetails: OrderDetails, originUrl: string
   return {
     sandbox: isSandbox,
     merchant_id: PAYHERE_MERCHANT_ID,
-    return_url: `${originUrl}/checkout?order_id=${orderId}`,
+    return_url: `${originUrl}/checkout`,
     cancel_url: `${originUrl}/checkout`,
     notify_url: `${originUrl}/api/payhere/notify`,
     order_id: orderId,
