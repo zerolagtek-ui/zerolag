@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/lib/productsData';
-import { preparePayHereForm, loadPayHereSDK, submitPayHereForm } from '@/lib/payhere';
+import { preparePayHereForm, submitPayHereForm } from '@/lib/payhere';
 import {
   addStoredOrder,
   getStoredBankDetails,
@@ -91,8 +91,6 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
     if (isOpen) {
       loadData();
-      // Pre-load PayHere SDK
-      loadPayHereSDK().catch(() => {});
     }
   }, [isOpen]);
 
@@ -187,13 +185,9 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       orderDate: new Date().toISOString()
     };
 
-    // PayHere Gateway Integration
+    // PayHere Gateway Integration (Direct Form POST Submission)
     if (formData.paymentMethod === 'payhere') {
       try {
-        await loadPayHereSDK().catch((err) => {
-          console.warn('PayHere SDK script loading issue:', err);
-        });
-
         const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
 
         const hashRes = await fetch('/api/payhere/hash', {
@@ -212,54 +206,21 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           throw new Error(errorMessage);
         }
 
+        // 1. Create/Save Pending Order first
+        addStoredOrder(newOrderPayload);
+        fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailPayload)
+        }).catch(() => {});
+        clearCart();
+
+        // 2 & 3. Prepare standard PayHere POST parameters
         const payhereParams = preparePayHereForm(newOrderPayload, originUrl, hashData.hash);
 
-        const winAny = window as any;
-        if (winAny.payhere && typeof winAny.payhere.startPayment === 'function') {
-          try {
-            winAny.payhere.onCompleted = function onCompleted(orderId: string) {
-              const completedPayload = {
-                ...newOrderPayload,
-                paymentStatus: 'Paid' as const,
-                paymentMethod: 'payhere' as const
-              };
-              addStoredOrder(completedPayload);
-              fetch('/api/send-order-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(emailPayload)
-              }).catch(() => {});
-
-              setConfirmedOrderId(orderId || generatedOrderId);
-              setOrderConfirmed(true);
-              setIsSubmitting(false);
-              confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
-              clearCart();
-            };
-
-            winAny.payhere.onDismissed = function onDismissed() {
-              setIsSubmitting(false);
-              setPaymentError('PayHere payment window was closed before completion. Please try again or select another payment option.');
-            };
-
-            winAny.payhere.onError = function onError(error: string) {
-              console.error('PayHere Gateway Error:', error);
-              setIsSubmitting(false);
-              setPaymentError(`PayHere Payment Error: ${error || 'Transaction failed'}. Please try again.`);
-            };
-
-            winAny.payhere.startPayment(payhereParams);
-            return;
-          } catch (startErr) {
-            console.warn('payhere.startPayment failed. Automatically submitting standard HTML POST form fallback:', startErr);
-            submitPayHereForm(payhereParams);
-            return;
-          }
-        } else {
-          console.warn('PayHere SDK startPayment unavailable. Automatically submitting standard HTML POST form fallback...');
-          submitPayHereForm(payhereParams);
-          return;
-        }
+        // 4. Immediately execute direct HTML Form POST submission
+        submitPayHereForm(payhereParams);
+        return;
       } catch (err: any) {
         console.error('PayHere execution error:', err);
         setPaymentError(err.message || 'PayHere payment initialization failed.');

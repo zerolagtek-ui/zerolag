@@ -65,31 +65,32 @@ export const loadPayHereSDK = (): Promise<void> => {
   });
 };
 
-export function submitPayHereForm(params: PayHereParams): void {
+export const submitPayHereForm = (params: Record<string, any>): void => {
   if (typeof window === 'undefined') return;
 
-  const isLive = (process.env.NEXT_PUBLIC_PAYHERE_MODE || 'sandbox') === 'live';
-  const actionUrl = isLive
-    ? 'https://www.payhere.lk/pay/checkout'
-    : 'https://sandbox.payhere.lk/pay/checkout';
+  const actionUrl =
+    process.env.NEXT_PUBLIC_PAYHERE_MODE === 'live'
+      ? 'https://www.payhere.lk/pay/checkout'
+      : 'https://sandbox.payhere.lk/pay/checkout';
 
   const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = actionUrl;
+  form.setAttribute('method', 'POST');
+  form.setAttribute('action', actionUrl);
+  form.setAttribute('target', '_self');
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = String(value);
+      input.setAttribute('type', 'hidden');
+      input.setAttribute('name', key);
+      input.setAttribute('value', String(value));
       form.appendChild(input);
     }
   });
 
   document.body.appendChild(form);
   form.submit();
-}
+};
 
 export function preparePayHereForm(orderDetails: OrderDetails, originUrl: string, hash: string = ''): PayHereParams {
   const nameParts = (orderDetails.customerName || 'Customer Valued').trim().split(' ');
