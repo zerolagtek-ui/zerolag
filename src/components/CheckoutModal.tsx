@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/lib/productsData';
-import { preparePayHereForm, loadPayHereSDK } from '@/lib/payhere';
+import { preparePayHereForm, loadPayHereSDK, submitPayHereForm } from '@/lib/payhere';
 import {
   addStoredOrder,
   getStoredBankDetails,
@@ -187,10 +187,13 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       orderDate: new Date().toISOString()
     };
 
-    // PayHere Gateway Sandbox Integration
+    // PayHere Gateway Integration
     if (formData.paymentMethod === 'payhere') {
       try {
-        await loadPayHereSDK();
+        await loadPayHereSDK().catch((err) => {
+          console.warn('PayHere SDK script loading issue:', err);
+        });
+
         const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
 
         const hashRes = await fetch('/api/payhere/hash', {
@@ -204,54 +207,62 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         });
 
         const hashData = await hashRes.json();
-        if (!hashRes.ok || !hashData.success) {
+        if (!hashRes.ok || !hashData.hash) {
           throw new Error(hashData.error || 'Failed to generate PayHere payment hash');
         }
 
         const payhereParams = preparePayHereForm(newOrderPayload, originUrl, hashData.hash);
 
         const winAny = window as any;
-        if (winAny.payhere) {
-          winAny.payhere.onCompleted = function onCompleted(orderId: string) {
-            const completedPayload = {
-              ...newOrderPayload,
-              paymentStatus: 'Paid' as const,
-              paymentMethod: 'payhere' as const
+        if (winAny.payhere && typeof winAny.payhere.startPayment === 'function') {
+          try {
+            winAny.payhere.onCompleted = function onCompleted(orderId: string) {
+              const completedPayload = {
+                ...newOrderPayload,
+                paymentStatus: 'Paid' as const,
+                paymentMethod: 'payhere' as const
+              };
+              addStoredOrder(completedPayload);
+              fetch('/api/send-order-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(emailPayload)
+              }).catch(() => {});
+
+              setConfirmedOrderId(orderId || generatedOrderId);
+              setOrderConfirmed(true);
+              setIsSubmitting(false);
+              confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+              clearCart();
             };
-            addStoredOrder(completedPayload);
-            fetch('/api/send-order-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(emailPayload)
-            }).catch(() => {});
 
-            setConfirmedOrderId(orderId || generatedOrderId);
-            setOrderConfirmed(true);
-            setIsSubmitting(false);
-            confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
-            clearCart();
-          };
+            winAny.payhere.onDismissed = function onDismissed() {
+              setIsSubmitting(false);
+              setPaymentError('PayHere payment window was closed before completion. Please try again or select another payment option.');
+            };
 
-          winAny.payhere.onDismissed = function onDismissed() {
-            setIsSubmitting(false);
-            setPaymentError('PayHere payment window was closed before completion. Please try again or select another payment option.');
-          };
+            winAny.payhere.onError = function onError(error: string) {
+              console.error('PayHere Gateway Error:', error);
+              setIsSubmitting(false);
+              setPaymentError(`PayHere Payment Error: ${error || 'Transaction failed'}. Please try again.`);
+            };
 
-          winAny.payhere.onError = function onError(error: string) {
-            console.error('PayHere Gateway Error:', error);
-            setIsSubmitting(false);
-            setPaymentError(`PayHere Payment Error: ${error || 'Transaction failed'}. Please try again.`);
-          };
-
-          winAny.payhere.startPayment(payhereParams);
-          return;
+            winAny.payhere.startPayment(payhereParams);
+            return;
+          } catch (startErr) {
+            console.warn('payhere.startPayment failed. Using standard HTML POST form fallback:', startErr);
+            submitPayHereForm(payhereParams);
+            return;
+          }
         } else {
-          throw new Error('PayHere SDK is not loaded properly.');
+          console.warn('PayHere SDK startPayment unavailable. Submitting standard HTML POST form fallback...');
+          submitPayHereForm(payhereParams);
+          return;
         }
       } catch (err: any) {
-        console.error('PayHere init failed:', err);
+        console.error('PayHere execution error:', err);
         setIsSubmitting(false);
-        setPaymentError('Failed to load PayHere Gateway script. If you are using an AdBlocker or Brave Shields, please disable it for this site or select Bank Transfer / COD.');
+        setPaymentError(err.message || 'PayHere payment initialization failed.');
         return;
       }
     }

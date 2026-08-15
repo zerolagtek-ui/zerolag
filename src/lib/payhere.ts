@@ -20,7 +20,7 @@ export interface PayHereParams {
   hash?: string;
 }
 
-export const PAYHERE_MERCHANT_ID = process.env.NEXT_PUBLIC_PAYHERE_MERCHANT_ID || '1211149';
+export const PAYHERE_MERCHANT_ID = process.env.NEXT_PUBLIC_PAYHERE_MERCHANT_ID || '';
 
 export const SCRIPT_URL =
   process.env.NEXT_PUBLIC_PAYHERE_JS_URL ||
@@ -40,15 +40,15 @@ export const loadPayHereSDK = (): Promise<void> => {
       return;
     }
 
-    const existingScript = document.getElementById('payhere-sdk');
+    const existingScript = document.getElementById('payhere-sdk') as HTMLScriptElement | null;
     if (existingScript) {
-      existingScript.addEventListener('load', () => resolve());
-      existingScript.addEventListener('error', (err) => reject(err));
-      // In case it already loaded
       if ((window as any).payhere) {
         resolve();
         return;
       }
+      existingScript.addEventListener('load', () => resolve());
+      existingScript.addEventListener('error', (err) => reject(err));
+      return;
     }
 
     const script = document.createElement('script');
@@ -64,6 +64,32 @@ export const loadPayHereSDK = (): Promise<void> => {
     document.head.appendChild(script);
   });
 };
+
+export function submitPayHereForm(params: PayHereParams): void {
+  if (typeof window === 'undefined') return;
+
+  const isLive = (process.env.NEXT_PUBLIC_PAYHERE_MODE || 'sandbox') === 'live';
+  const actionUrl = isLive
+    ? 'https://www.payhere.lk/pay/checkout'
+    : 'https://sandbox.payhere.lk/pay/checkout';
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = actionUrl;
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = String(value);
+      form.appendChild(input);
+    }
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
 
 export function preparePayHereForm(orderDetails: OrderDetails, originUrl: string, hash: string = ''): PayHereParams {
   const nameParts = (orderDetails.customerName || 'Customer Valued').trim().split(' ');

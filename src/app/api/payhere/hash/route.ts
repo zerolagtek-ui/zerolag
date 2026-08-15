@@ -13,9 +13,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const merchantId = process.env.NEXT_PUBLIC_PAYHERE_MERCHANT_ID || '1211149';
-    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET || '4MTQ2MzQ5OTIyNTI2MDUxMzA5MjIxMTU3NjY0NDkxMTY3NDEzMTg1';
+    const merchantId = process.env.NEXT_PUBLIC_PAYHERE_MERCHANT_ID;
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
     const isSandbox = (process.env.NEXT_PUBLIC_PAYHERE_MODE || 'sandbox') !== 'live';
+
+    if (!merchantSecret || !merchantId) {
+      return NextResponse.json(
+        { error: 'PayHere credentials not configured on server' },
+        { status: 500 }
+      );
+    }
 
     const numAmount = typeof amount === 'number' ? amount : parseFloat(String(amount));
     const formattedAmount = numAmount.toFixed(2);

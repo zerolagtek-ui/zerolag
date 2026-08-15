@@ -38,7 +38,7 @@ export default function RootLayout({
         <Script
           id="payhere-sdk"
           src={PAYHERE_PRELOAD_URL}
-          strategy="lazyOnload"
+          strategy="beforeInteractive"
         />
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange enableSystem={false}>
           <CartProvider>
