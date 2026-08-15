@@ -15,12 +15,13 @@ export async function POST(request: Request) {
 
     const merchantId = process.env.NEXT_PUBLIC_PAYHERE_MERCHANT_ID;
     const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
-    const isSandbox = (process.env.NEXT_PUBLIC_PAYHERE_MODE || 'sandbox') !== 'live';
+    const mode = process.env.NEXT_PUBLIC_PAYHERE_MODE || 'sandbox';
+    const isSandbox = mode !== 'live';
 
-    if (!merchantSecret || !merchantId) {
+    if (!merchantId || !merchantSecret) {
       return NextResponse.json(
-        { error: 'PayHere credentials not configured on server' },
-        { status: 500 }
+        { success: false, error: 'PAYHERE_NOT_CONFIGURED', message: 'PayHere Merchant ID or Secret is missing in environment variables.' },
+        { status: 400 }
       );
     }
 

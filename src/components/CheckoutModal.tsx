@@ -208,7 +208,8 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
         const hashData = await hashRes.json();
         if (!hashRes.ok || !hashData.hash) {
-          throw new Error(hashData.error || 'Failed to generate PayHere payment hash');
+          const errorMessage = hashData.message || hashData.error || 'Failed to generate PayHere payment hash';
+          throw new Error(errorMessage);
         }
 
         const payhereParams = preparePayHereForm(newOrderPayload, originUrl, hashData.hash);
@@ -250,19 +251,19 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             winAny.payhere.startPayment(payhereParams);
             return;
           } catch (startErr) {
-            console.warn('payhere.startPayment failed. Using standard HTML POST form fallback:', startErr);
+            console.warn('payhere.startPayment failed. Automatically submitting standard HTML POST form fallback:', startErr);
             submitPayHereForm(payhereParams);
             return;
           }
         } else {
-          console.warn('PayHere SDK startPayment unavailable. Submitting standard HTML POST form fallback...');
+          console.warn('PayHere SDK startPayment unavailable. Automatically submitting standard HTML POST form fallback...');
           submitPayHereForm(payhereParams);
           return;
         }
       } catch (err: any) {
         console.error('PayHere execution error:', err);
-        setIsSubmitting(false);
         setPaymentError(err.message || 'PayHere payment initialization failed.');
+        setIsSubmitting(false);
         return;
       }
     }
