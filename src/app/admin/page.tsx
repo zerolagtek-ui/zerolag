@@ -92,6 +92,20 @@ interface AdminReview {
   created_at: string;
 }
 
+interface PromoCodeType {
+  id: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountAmount?: number;
+  isActive: boolean;
+  usageCount: number;
+  maxUsage?: number;
+  expiresAt?: string | null;
+  created_at?: string;
+}
+
 // Helper function to find a key in header map case-insensitively
 function findHeaderValue(row: Record<string, string>, possibleKeys: string[]): string {
   const keys = Object.keys(row);
@@ -122,7 +136,7 @@ export default function AdminPage() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'slides' | 'categories' | 'reviews' | 'bank' | 'shipping' | 'branding'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'slides' | 'categories' | 'reviews' | 'bank' | 'shipping' | 'branding' | 'promos'>('products');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
@@ -131,6 +145,21 @@ export default function AdminPage() {
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [bankConfig, setBankConfig] = useState<BankAccountDetails>(getStoredBankDetails());
   const [siteLogoInput, setSiteLogoInput] = useState<string>('');
+
+  // Promo Codes state
+  const [promoCodes, setPromoCodes] = useState<PromoCodeType[]>([]);
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState<boolean>(false);
+  const [editingPromo, setEditingPromo] = useState<PromoCodeType | null>(null);
+  const [promoCodeInput, setPromoCodeInput] = useState<string>('');
+  const [promoDiscountType, setPromoDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [promoDiscountValue, setPromoDiscountValue] = useState<number | ''>('');
+  const [promoMinOrderAmount, setPromoMinOrderAmount] = useState<number | ''>('');
+  const [promoMaxDiscountAmount, setPromoMaxDiscountAmount] = useState<number | ''>('');
+  const [promoMaxUsage, setPromoMaxUsage] = useState<number | ''>('');
+  const [promoExpiresAt, setPromoExpiresAt] = useState<string>('');
+  const [promoIsActive, setPromoIsActive] = useState<boolean>(true);
+  const [promoSaving, setPromoSaving] = useState<boolean>(false);
+  const [promoNotice, setPromoNotice] = useState<string>('');
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
@@ -306,12 +335,131 @@ export default function AdminPage() {
     setShippingRates(rates);
   };
 
+  const fetchPromoCodes = async () => {
+    try {
+      const res = await fetch('/api/promo-codes');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.promoCodes)) {
+          setPromoCodes(data.promoCodes);
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching promo codes for admin:', e);
+    }
+  };
+
+  const handleSavePromoCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promoCodeInput.trim() || promoDiscountValue === '') return;
+
+    setPromoSaving(true);
+    setPromoNotice('');
+
+    try {
+      const payload = {
+        id: editingPromo ? editingPromo.id : undefined,
+        code: promoCodeInput.trim().toUpperCase(),
+        discountType: promoDiscountType,
+        discountValue: Number(promoDiscountValue),
+        minOrderAmount: promoMinOrderAmount !== '' ? Number(promoMinOrderAmount) : 0,
+        maxDiscountAmount: promoMaxDiscountAmount !== '' ? Number(promoMaxDiscountAmount) : null,
+        maxUsage: promoMaxUsage !== '' ? Number(promoMaxUsage) : null,
+        expiresAt: promoExpiresAt ? promoExpiresAt : null,
+        isActive: promoIsActive
+      };
+
+      const method = editingPromo ? 'PUT' : 'POST';
+      const res = await fetch('/api/promo-codes', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPromoNotice(editingPromo ? 'Promo code updated successfully!' : 'Promo code created successfully!');
+        fetchPromoCodes();
+        setTimeout(() => {
+          setIsPromoModalOpen(false);
+          resetPromoForm();
+        }, 900);
+      } else {
+        setPromoNotice(data.error || 'Failed to save promo code');
+      }
+    } catch (err: unknown) {
+      console.error('Save promo error:', err);
+      setPromoNotice('Error saving promo code');
+    } finally {
+      setPromoSaving(false);
+    }
+  };
+
+  const handleTogglePromoActive = async (promo: PromoCodeType) => {
+    try {
+      const res = await fetch('/api/promo-codes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: promo.id, isActive: !promo.isActive })
+      });
+      if (res.ok) {
+        fetchPromoCodes();
+      }
+    } catch (err) {
+      console.error('Failed to toggle promo active state:', err);
+    }
+  };
+
+  const handleDeletePromoCode = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this promo code?')) return;
+    try {
+      const res = await fetch(`/api/promo-codes?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchPromoCodes();
+      }
+    } catch (err) {
+      console.error('Failed to delete promo code:', err);
+    }
+  };
+
+  const openPromoModal = (promo?: PromoCodeType) => {
+    setPromoNotice('');
+    if (promo) {
+      setEditingPromo(promo);
+      setPromoCodeInput(promo.code);
+      setPromoDiscountType(promo.discountType);
+      setPromoDiscountValue(promo.discountValue);
+      setPromoMinOrderAmount(promo.minOrderAmount || '');
+      setPromoMaxDiscountAmount(promo.maxDiscountAmount || '');
+      setPromoMaxUsage(promo.maxUsage || '');
+      setPromoExpiresAt(promo.expiresAt ? promo.expiresAt.split('T')[0] : '');
+      setPromoIsActive(promo.isActive);
+    } else {
+      resetPromoForm();
+    }
+    setIsPromoModalOpen(true);
+  };
+
+  const resetPromoForm = () => {
+    setEditingPromo(null);
+    setPromoCodeInput('');
+    setPromoDiscountType('percentage');
+    setPromoDiscountValue('');
+    setPromoMinOrderAmount('');
+    setPromoMaxDiscountAmount('');
+    setPromoMaxUsage('');
+    setPromoExpiresAt('');
+    setPromoIsActive(true);
+    setPromoNotice('');
+  };
+
   const refreshData = async () => {
     fetchProducts();
     await fetchSlides();
     await fetchLogo();
     await fetchBank();
     await fetchShippingRates();
+    await fetchPromoCodes();
     setOrders(getStoredOrders());
     setCategories(getDynamicCategories());
     fetchReviews();
@@ -1139,6 +1287,23 @@ export default function AdminPage() {
                 <span>Logo & Branding</span>
               </div>
             </button>
+
+            <button
+              onClick={() => { setActiveTab('promos'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'promos'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Tag className="w-4 h-4 text-lime-400" />
+                <span>Promo Codes</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-bold font-mono">
+                {promoCodes.length}
+              </span>
+            </button>
           </nav>
         </div>
 
@@ -1177,6 +1342,7 @@ export default function AdminPage() {
               {activeTab === 'bank' && '🏦 Bank Account Details Configuration'}
               {activeTab === 'shipping' && '🚚 Courier Shipping Rates Configuration'}
               {activeTab === 'branding' && '🎨 Store Logo & Visual Branding'}
+              {activeTab === 'promos' && '🏷️ Promo Codes & Coupons Manager'}
             </h1>
             <p className="text-xs text-zinc-400 font-mono mt-0.5">
               ZeroLag TEK Administration Dashboard
@@ -1935,7 +2101,7 @@ export default function AdminPage() {
               </div>
 
               {/* Cloudinary Image Upload for Logo */}
-              <div>
+<div>
                 <label className="block text-zinc-400 mb-1 font-bold">Upload Logo Image</label>
                 <label className="flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-lime-400 text-zinc-300 hover:text-white cursor-pointer transition-colors">
                   <Upload className="w-4 h-4 text-lime-400" />
@@ -1966,6 +2132,128 @@ export default function AdminPage() {
                 <span>Save Site Logo</span>
               </button>
             </form>
+          </div>
+        )}
+
+        {/* Promo Codes & Coupons Manager Tab */}
+        {activeTab === 'promos' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-white text-lg font-mono">Dynamic Store Coupons & Discounts</h2>
+                <p className="text-xs text-zinc-400 font-mono">Create, toggle, and manage promo codes applied at checkout.</p>
+              </div>
+
+              <button
+                onClick={() => openPromoModal()}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold font-mono text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Promo Code</span>
+              </button>
+            </div>
+
+            {/* Promo Codes Table */}
+            <div className="bg-[#0a0c10] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="py-4 px-6">Status</th>
+                      <th className="py-4 px-6">Code</th>
+                      <th className="py-4 px-6">Discount</th>
+                      <th className="py-4 px-6">Min Order</th>
+                      <th className="py-4 px-6">Max Cap</th>
+                      <th className="py-4 px-6">Usage</th>
+                      <th className="py-4 px-6">Expiry</th>
+                      <th className="py-4 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
+                    {promoCodes.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-zinc-500 font-mono">
+                          No promo codes found. Click &quot;Create Promo Code&quot; above to create one.
+                        </td>
+                      </tr>
+                    ) : (
+                      promoCodes.map((promo) => (
+                        <tr key={promo.id} className="hover:bg-zinc-900/50 transition-colors">
+                          {/* Status */}
+                          <td className="py-4 px-6">
+                            <button
+                              onClick={() => handleTogglePromoActive(promo)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                                promo.isActive
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${promo.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                              <span>{promo.isActive ? 'ACTIVE' : 'INACTIVE'}</span>
+                            </button>
+                          </td>
+
+                          {/* Code */}
+                          <td className="py-4 px-6">
+                            <span className="font-extrabold text-lime-400 text-sm tracking-wider">
+                              {promo.code}
+                            </span>
+                          </td>
+
+                          {/* Discount */}
+                          <td className="py-4 px-6 font-bold text-white">
+                            {promo.discountType === 'percentage' ? (
+                              <span className="text-amber-400">{promo.discountValue}% OFF</span>
+                            ) : (
+                              <span className="text-cyan-400">{formatPrice(promo.discountValue)} OFF</span>
+                            )}
+                          </td>
+
+                          {/* Min Order */}
+                          <td className="py-4 px-6 text-zinc-400">
+                            {promo.minOrderAmount > 0 ? formatPrice(promo.minOrderAmount) : 'None'}
+                          </td>
+
+                          {/* Max Discount Cap */}
+                          <td className="py-4 px-6 text-zinc-400">
+                            {promo.maxDiscountAmount ? formatPrice(promo.maxDiscountAmount) : 'No Cap'}
+                          </td>
+
+                          {/* Usage Count */}
+                          <td className="py-4 px-6 text-zinc-400">
+                            {promo.usageCount} {promo.maxUsage ? `/ ${promo.maxUsage}` : 'uses'}
+                          </td>
+
+                          {/* Expiry Date */}
+                          <td className="py-4 px-6 text-zinc-400">
+                            {promo.expiresAt ? new Date(promo.expiresAt).toLocaleDateString() : 'Never'}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-4 px-6 text-right space-x-2">
+                            <button
+                              onClick={() => openPromoModal(promo)}
+                              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-lime-400 hover:border-lime-400/50 transition-all"
+                              title="Edit Promo Code"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeletePromoCode(promo.id)}
+                              className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition-all"
+                              title="Delete Promo Code"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2334,6 +2622,156 @@ export default function AdminPage() {
               <div>
                 <button type="submit" className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm">
                   {editingCategory ? 'Update Category' : 'Save Category'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Promo Code Create / Edit Modal */}
+      {isPromoModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0a0c10] border border-zinc-800 rounded-3xl w-full max-w-lg p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <Tag className="w-5 h-5 text-lime-400" />
+                <h3 className="font-extrabold text-white text-base font-mono">
+                  {editingPromo ? 'EDIT PROMO CODE' : 'CREATE PROMO CODE'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsPromoModalOpen(false)}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {promoNotice && (
+              <div className="p-3 rounded-xl bg-lime-400/10 border border-lime-400/30 text-lime-400 text-xs font-mono">
+                {promoNotice}
+              </div>
+            )}
+
+            <form onSubmit={handleSavePromoCode} className="space-y-4 font-mono text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1 font-bold">Promo Code String *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. ZEROLAG10, SAVE500"
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-lime-400 font-bold uppercase focus:border-lime-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Discount Type *</label>
+                  <select
+                    value={promoDiscountType}
+                    onChange={(e) => setPromoDiscountType(e.target.value as 'percentage' | 'fixed')}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                  >
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="fixed">Flat LKR (Rs.)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Discount Value *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={promoDiscountType === 'percentage' ? 100 : undefined}
+                    placeholder={promoDiscountType === 'percentage' ? 'e.g. 10 (10%)' : 'e.g. 500 (Rs. 500)'}
+                    value={promoDiscountValue}
+                    onChange={(e) => setPromoDiscountValue(e.target.value !== '' ? Number(e.target.value) : '')}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Min Order Amount (LKR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 2000 (0 for none)"
+                    value={promoMinOrderAmount}
+                    onChange={(e) => setPromoMinOrderAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Max Discount Cap (LKR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Optional max discount cap"
+                    value={promoMaxDiscountAmount}
+                    onChange={(e) => setPromoMaxDiscountAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Usage Limit (Max Uses)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Optional max redemptions"
+                    value={promoMaxUsage}
+                    onChange={(e) => setPromoMaxUsage(e.target.value !== '' ? Number(e.target.value) : '')}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Expiry Date</label>
+                  <input
+                    type="date"
+                    value={promoExpiresAt}
+                    onChange={(e) => setPromoExpiresAt(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="promoIsActive"
+                  checked={promoIsActive}
+                  onChange={(e) => setPromoIsActive(e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-lime-400 focus:ring-lime-400"
+                />
+                <label htmlFor="promoIsActive" className="text-white font-bold cursor-pointer">
+                  Activate Promo Code Immediately
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-zinc-800">
+                <button
+                  type="submit"
+                  disabled={promoSaving}
+                  className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-all cursor-pointer"
+                >
+                  {promoSaving ? 'Saving Promo Code...' : editingPromo ? 'Update Promo Code' : 'Create Promo Code'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPromoModalOpen(false)}
+                  className="px-4 py-3.5 rounded-xl bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
                 </button>
               </div>
             </form>

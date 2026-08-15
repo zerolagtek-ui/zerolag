@@ -17,23 +17,37 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
     totalPriceLkr,
     appliedPromo,
     discountAmountLkr,
-    applyPromoCode
+    applyPromoCode,
+    removePromoCode
   } = useCart();
 
   const [promoInput, setPromoInput] = useState('');
   const [promoMsg, setPromoMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   if (!isCartOpen) return null;
 
-  const handlePromoSubmit = (e: React.FormEvent) => {
+  const handlePromoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promoInput) return;
-    const success = applyPromoCode(promoInput);
-    if (success) {
-      setPromoMsg({ text: `Promo code applied! Saved on order`, error: false });
+    if (!promoInput.trim()) return;
+
+    setIsApplyingPromo(true);
+    setPromoMsg(null);
+
+    const res = await applyPromoCode(promoInput);
+    setIsApplyingPromo(false);
+
+    if (res.success) {
+      setPromoMsg({ text: res.message, error: false });
+      setPromoInput('');
     } else {
-      setPromoMsg({ text: 'Invalid promo code. Try ZEROLAG10', error: true });
+      setPromoMsg({ text: res.message, error: true });
     }
+  };
+
+  const handleRemovePromo = () => {
+    removePromoCode();
+    setPromoMsg(null);
   };
 
   const subtotalLkr = cart.reduce((sum, item) => sum + item.product.priceLkr * item.quantity, 0);
@@ -136,33 +150,52 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
           {cart.length > 0 && (
             <div className="p-6 border-t border-zinc-800 bg-zinc-950 space-y-4">
               
-              {/* Promo Code Input */}
-              <form onSubmit={handlePromoSubmit} className="space-y-1.5">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Tag className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      placeholder="Promo Code (e.g. ZEROLAG10)"
-                      value={promoInput}
-                      onChange={(e) => setPromoInput(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-xs font-mono text-zinc-200 uppercase focus:border-lime-400 focus:outline-none"
-                    />
+              {/* Promo Code Input or Active Promo Badge */}
+              {appliedPromo ? (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs font-mono">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="text-emerald-400 font-bold block">{appliedPromo} APPLIED</span>
+                      <span className="text-[10px] text-zinc-400">-{formatPrice(discountAmountLkr)} off subtotal</span>
+                    </div>
                   </div>
                   <button
-                    type="submit"
-                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-mono font-bold text-lime-400 border border-zinc-700"
+                    onClick={handleRemovePromo}
+                    className="text-xs text-rose-400 hover:underline font-bold"
                   >
-                    Apply
+                    Remove
                   </button>
                 </div>
-                {promoMsg && (
-                  <p className={`text-[11px] font-mono flex items-center gap-1 ${promoMsg.error ? 'text-rose-500' : 'text-emerald-400'}`}>
-                    {promoMsg.error ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
-                    <span>{promoMsg.text}</span>
-                  </p>
-                )}
-              </form>
+              ) : (
+                <form onSubmit={handlePromoSubmit} className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Tag className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        placeholder="Promo Code (e.g. ZEROLAG10)"
+                        value={promoInput}
+                        onChange={(e) => setPromoInput(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-xs font-mono text-zinc-200 uppercase focus:border-lime-400 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isApplyingPromo}
+                      className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-mono font-bold text-lime-400 border border-zinc-700 disabled:opacity-50"
+                    >
+                      {isApplyingPromo ? '...' : 'Apply'}
+                    </button>
+                  </div>
+                  {promoMsg && (
+                    <p className={`text-[11px] font-mono flex items-center gap-1 ${promoMsg.error ? 'text-rose-500' : 'text-emerald-400'}`}>
+                      {promoMsg.error ? <AlertCircle className="w-3 h-3 shrink-0" /> : <CheckCircle2 className="w-3 h-3 shrink-0" />}
+                      <span>{promoMsg.text}</span>
+                    </p>
+                  )}
+                </form>
+              )}
 
               {/* Price Calculation */}
               <div className="space-y-1.5 font-mono text-xs text-zinc-400 pt-2 border-t border-zinc-800/80">

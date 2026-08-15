@@ -11,7 +11,7 @@ import {
   getStoredShippingRates,
   syncShippingRatesFromDatabase
 } from '@/lib/storeManager';
-import { PaymentMethod, BankAccountDetails, ShippingOption } from '@/types';
+import { PaymentMethod, BankAccountDetails, ShippingOption, OrderDetails } from '@/types';
 import {
   X,
   ShieldCheck,
@@ -43,6 +43,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     customerName: '',
     email: '',
     phone: '',
+    secondaryPhone: '',
     address: '',
     city: 'Colombo',
     postalCode: '00100',
@@ -105,8 +106,19 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   };
 
   const shippingFee = Number(activeShipping.rate || 0);
-  const itemSubtotal = totalPriceLkr + discountAmountLkr;
-  const grandTotal = totalPriceLkr + shippingFee;
+  const subtotal = cart.reduce((sum, item) => sum + item.product.priceLkr * item.quantity, 0);
+  const promoDiscount = discountAmountLkr || 0;
+  const baseTotal = subtotal - promoDiscount + shippingFee;
+
+  // Payment Method Adjustment (-3% for Bank Transfer, +10% on baseTotal for Payzy)
+  let paymentMethodAdjustment = 0;
+  if (formData.paymentMethod === 'bank-transfer') {
+    paymentMethodAdjustment = -(subtotal * 0.03);
+  } else if (formData.paymentMethod === 'payzy') {
+    paymentMethodAdjustment = +(baseTotal * 0.10);
+  }
+
+  const grandTotal = Math.max(0, Math.round(baseTotal + paymentMethodAdjustment));
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -144,11 +156,12 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     setPaymentError('');
     const generatedOrderId = `ZLAG-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const newOrderPayload = {
+    const newOrderPayload: OrderDetails = {
       id: generatedOrderId,
       customerName: formData.customerName,
       email: formData.email,
       phone: formData.phone,
+      secondaryPhone: formData.secondaryPhone || undefined,
       address: formData.address,
       city: formData.city,
       postalCode: formData.postalCode,
@@ -158,8 +171,8 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       paymentStatus: formData.paymentMethod === 'cod' || formData.paymentMethod === 'bank-transfer' ? ('Pending' as const) : ('Paid' as const),
       orderStatus: 'Pending' as const,
       items: cart,
-      subtotalLkr: itemSubtotal,
-      discountLkr: discountAmountLkr,
+      subtotalLkr: subtotal,
+      discountLkr: promoDiscount,
       shippingLkr: shippingFee,
       totalLkr: grandTotal,
       createdAt: new Date().toISOString()
@@ -170,6 +183,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       customerName: formData.customerName,
       customerEmail: formData.email,
       customerPhone: formData.phone,
+      secondaryPhone: formData.secondaryPhone || '',
       shippingAddress: `${formData.address}, ${formData.city}, ${formData.postalCode}`,
       paymentMethod: formData.paymentMethod,
       shippingMethod: activeShipping.name,
@@ -179,11 +193,61 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         price: item.product.priceLkr,
         total: item.product.priceLkr * item.quantity
       })),
-      subtotal: itemSubtotal,
+      subtotal: subtotal,
       shippingFee: shippingFee,
       totalAmount: grandTotal,
       orderDate: new Date().toISOString()
     };
+
+    // Payzy Gateway Integration (Direct Server Signing & Redirection)
+    if (formData.paymentMethod === 'payzy') {
+      try {
+        const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+        const nameParts = formData.customerName.trim().split(' ');
+        const firstName = nameParts[0] || 'Customer';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Save order & email first
+        addStoredOrder(newOrderPayload);
+        fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailPayload)
+        }).catch(() => {});
+
+        const payzyRes = await fetch('/api/payzy/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_id: generatedOrderId,
+            amount: grandTotal,
+            freight: shippingFee,
+            first_name: firstName,
+            last_name: lastName,
+            phone: formData.phone,
+            email: formData.email,
+            address: formData.address,
+            city: formData.city,
+            response_url: `${originUrl}/checkout?order_id=${generatedOrderId}`
+          })
+        });
+
+        const payzyData = await payzyRes.json();
+        if (payzyRes.ok && payzyData.success && payzyData.redirectUrl) {
+          clearCart();
+          window.location.href = payzyData.redirectUrl;
+          return;
+        } else {
+          const errMsg = payzyData.message || (payzyData.error?.message ? payzyData.error.message : (typeof payzyData.error === 'string' ? payzyData.error : 'Payzy payment initialization failed.'));
+          throw new Error(errMsg);
+        }
+      } catch (err: any) {
+        console.error('Payzy execution error:', err);
+        setPaymentError(err.message || 'Payzy payment initialization failed.');
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     // PayHere Gateway Integration (Direct Form POST Submission)
     if (formData.paymentMethod === 'payhere') {
@@ -414,6 +478,20 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                     />
                   </div>
                   <div>
+                    <label className="text-zinc-400 block mb-1">Secondary Phone / WhatsApp (Optional)</label>
+                    <input
+                      type="tel"
+                      name="secondaryPhone"
+                      value={formData.secondaryPhone}
+                      onChange={handleInputChange}
+                      placeholder="0719876543 (Optional)"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
                     <label className="text-zinc-400 block mb-1">City *</label>
                     <input
                       type="text"
@@ -425,19 +503,18 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
                     />
                   </div>
-                </div>
-
-                <div className="text-xs">
-                  <label className="text-zinc-400 block mb-1">Street Address *</label>
-                  <input
-                    type="text"
-                    name="address"
-                    required
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="No. 45, Main Street, Colombo 03"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
-                  />
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Street Address *</label>
+                    <input
+                      type="text"
+                      name="address"
+                      required
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      placeholder="No. 45, Main Street, Colombo 03"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-3 flex justify-end">
@@ -495,12 +572,24 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2 text-xs">
                   <div className="flex justify-between text-zinc-400">
                     <span>Items Subtotal ({cart.reduce((a, b) => a + b.quantity, 0)} items)</span>
-                    <span className="text-white">{formatPrice(itemSubtotal)}</span>
+                    <span className="text-white">{formatPrice(subtotal)}</span>
                   </div>
-                  {discountAmountLkr > 0 && (
+                  {promoDiscount > 0 && (
                     <div className="flex justify-between text-emerald-400">
-                      <span>Discount</span>
-                      <span>-{formatPrice(discountAmountLkr)}</span>
+                      <span>Promo Discount</span>
+                      <span>-{formatPrice(promoDiscount)}</span>
+                    </div>
+                  )}
+                  {paymentMethodAdjustment < 0 && (
+                    <div className="flex justify-between text-emerald-400 font-bold">
+                      <span>Bank Transfer Discount (3%)</span>
+                      <span>-{formatPrice(Math.abs(Math.round(paymentMethodAdjustment)))}</span>
+                    </div>
+                  )}
+                  {paymentMethodAdjustment > 0 && (
+                    <div className="flex justify-between text-amber-400 font-bold">
+                      <span>Payzy Processing Fee (10%)</span>
+                      <span>+{formatPrice(Math.round(paymentMethodAdjustment))}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-zinc-400">
@@ -561,8 +650,13 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                       onChange={() => setFormData({ ...formData, paymentMethod: 'bank-transfer' })}
                       className="hidden"
                     />
-                    <span className="font-bold block text-white">Bank Transfer</span>
-                    <span className="text-[10px]">Commercial Bank Online Deposit</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold block text-white">Bank Transfer</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">3% OFF</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 font-bold block mt-1">
+                      Save 3% with Direct Bank Transfer (-{formatPrice(Math.round(subtotal * 0.03))})
+                    </span>
                   </label>
 
                   <label className={`p-3.5 rounded-xl border cursor-pointer transition-all ${formData.paymentMethod === 'payhere' ? 'border-lime-400 bg-lime-500/10 text-lime-400' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}>
@@ -587,8 +681,13 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                       onChange={() => setFormData({ ...formData, paymentMethod: 'payzy' })}
                       className="hidden"
                     />
-                    <span className="font-bold block text-white">Payzy Gateway</span>
-                    <span className="text-[10px]">Direct Digital Checkout</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold block text-white">Payzy Gateway</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">+10% Fee</span>
+                    </div>
+                    <span className="text-[10px] text-amber-400 font-bold block mt-1">
+                      +10% Payzy Installment / Processing Fee (+{formatPrice(Math.round(baseTotal * 0.10))})
+                    </span>
                   </label>
 
                   <label className={`p-3.5 rounded-xl border cursor-pointer transition-all ${formData.paymentMethod === 'cod' ? 'border-lime-400 bg-lime-500/10 text-lime-400' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}>
@@ -633,12 +732,24 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                   <h4 className="font-bold text-white uppercase text-[11px] border-b border-zinc-800 pb-2">Final Order Summary</h4>
                   <div className="flex justify-between text-zinc-400">
                     <span>Items Subtotal</span>
-                    <span className="text-white">{formatPrice(itemSubtotal)}</span>
+                    <span className="text-white">{formatPrice(subtotal)}</span>
                   </div>
-                  {discountAmountLkr > 0 && (
+                  {promoDiscount > 0 && (
                     <div className="flex justify-between text-emerald-400">
-                      <span>Discount</span>
-                      <span>-{formatPrice(discountAmountLkr)}</span>
+                      <span>Promo Discount</span>
+                      <span>-{formatPrice(promoDiscount)}</span>
+                    </div>
+                  )}
+                  {paymentMethodAdjustment < 0 && (
+                    <div className="flex justify-between text-emerald-400 font-bold">
+                      <span>Bank Transfer Discount (3%)</span>
+                      <span>-{formatPrice(Math.abs(Math.round(paymentMethodAdjustment)))}</span>
+                    </div>
+                  )}
+                  {paymentMethodAdjustment > 0 && (
+                    <div className="flex justify-between text-amber-400 font-bold">
+                      <span>Payzy Processing Fee (10%)</span>
+                      <span>+{formatPrice(Math.round(paymentMethodAdjustment))}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-zinc-400">

@@ -30,18 +30,53 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     async function initCheckoutPage() {
-      // 1. Check for order_id in query parameters from PayHere return_url redirect
+      // 1. Check for Payzy / PayHere return query parameters
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
-        const orderIdParam = urlParams.get('order_id');
-        if (orderIdParam) {
-          clearCart();
-          setConfirmedOrderId(orderIdParam);
+        const xOrderId = urlParams.get('x_order_id') || urlParams.get('order_id');
+        const responseCode = urlParams.get('response_code');
+        const signature = urlParams.get('signature');
 
-          let matchedOrder = getStoredOrders().find(o => o.id === orderIdParam);
+        if (xOrderId && responseCode) {
+          if (responseCode === '00') {
+            // Verify with Payzy server endpoint
+            fetch('/api/payzy/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                x_order_id: xOrderId,
+                response_code: responseCode,
+                signature
+              })
+            }).catch(err => console.error('Payzy verification error:', err));
+
+            clearCart();
+            setConfirmedOrderId(xOrderId);
+
+            let matchedOrder = getStoredOrders().find(o => o.id === xOrderId);
+            if (matchedOrder) {
+              matchedOrder.paymentStatus = 'Paid';
+              updateOrderPaymentStatus(xOrderId, 'Paid');
+              setConfirmedOrderDetails(matchedOrder);
+            }
+
+            setOrderConfirmed(true);
+            confetti({
+              particleCount: 120,
+              spread: 80,
+              origin: { y: 0.5 },
+            });
+          } else {
+            setPaymentError('Payzy Transaction Failed or Cancelled. Please try again or choose another payment method.');
+          }
+        } else if (xOrderId && !responseCode) {
+          clearCart();
+          setConfirmedOrderId(xOrderId);
+
+          let matchedOrder = getStoredOrders().find(o => o.id === xOrderId);
           if (!matchedOrder) {
             try {
-              const res = await fetch(`/api/orders?order_id=${encodeURIComponent(orderIdParam)}`);
+              const res = await fetch(`/api/orders?order_id=${encodeURIComponent(xOrderId)}`);
               if (res.ok) {
                 const data = await res.json();
                 if (data.order) {
@@ -74,7 +109,7 @@ export default function CheckoutPage() {
 
           if (matchedOrder) {
             matchedOrder.paymentStatus = 'Paid';
-            updateOrderPaymentStatus(orderIdParam, 'Paid');
+            updateOrderPaymentStatus(xOrderId, 'Paid');
             setConfirmedOrderDetails(matchedOrder);
           }
 
@@ -117,19 +152,31 @@ export default function CheckoutPage() {
   };
 
   const shippingFee = Number(activeShipping.rate || 0);
-  const subtotal = totalPriceLkr + discountAmountLkr;
-  const totalAmount = totalPriceLkr + shippingFee;
+  const subtotal = cart.reduce((sum, item) => sum + item.product.priceLkr * item.quantity, 0);
+  const promoDiscount = discountAmountLkr || 0;
+  const baseTotal = subtotal - promoDiscount + shippingFee;
 
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
+    secondaryPhone: '',
     address: '',
     city: 'Colombo',
     postalCode: '00100',
     paymentMethod: 'bank-transfer' as PaymentMethod,
   });
+
+  // Payment Method Adjustment (-3% for Bank Transfer, +10% on baseTotal for Payzy)
+  let paymentMethodAdjustment = 0;
+  if (formData.paymentMethod === 'bank-transfer') {
+    paymentMethodAdjustment = -(subtotal * 0.03);
+  } else if (formData.paymentMethod === 'payzy') {
+    paymentMethodAdjustment = +(baseTotal * 0.10);
+  }
+
+  const totalAmount = Math.max(0, Math.round(baseTotal + paymentMethodAdjustment));
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -150,6 +197,7 @@ export default function CheckoutPage() {
       customerName: fullName,
       email: formData.email,
       phone: formData.phone,
+      secondaryPhone: formData.secondaryPhone || undefined,
       address: formData.address,
       city: formData.city,
       postalCode: formData.postalCode,
@@ -160,7 +208,7 @@ export default function CheckoutPage() {
       orderStatus: 'Pending' as const,
       items: cart,
       subtotalLkr: subtotal,
-      discountLkr: discountAmountLkr,
+      discountLkr: promoDiscount,
       shippingLkr: shippingFee,
       totalLkr: totalAmount,
       createdAt: new Date().toISOString(),
@@ -171,6 +219,7 @@ export default function CheckoutPage() {
       customerName: fullName,
       customerEmail: formData.email,
       customerPhone: formData.phone,
+      secondaryPhone: formData.secondaryPhone || '',
       shippingAddress: `${formData.address}, ${formData.city}, ${formData.postalCode}`,
       paymentMethod: formData.paymentMethod,
       shippingMethod: activeShipping.name,
@@ -185,6 +234,53 @@ export default function CheckoutPage() {
       totalAmount: totalAmount,
       orderDate: new Date().toISOString(),
     };
+
+    // Payzy Gateway Integration (Direct Server Signing & Redirection)
+    if (formData.paymentMethod === 'payzy') {
+      try {
+        const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+
+        // Save order & email first
+        addStoredOrder(newOrderPayload);
+        fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailPayload),
+        }).catch(() => {});
+
+        const payzyRes = await fetch('/api/payzy/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_id: generatedOrderId,
+            amount: totalAmount,
+            freight: shippingFee,
+            first_name: formData.firstName || 'Customer',
+            last_name: formData.lastName || '',
+            phone: formData.phone,
+            email: formData.email,
+            address: formData.address,
+            city: formData.city,
+            response_url: `${originUrl}/checkout?order_id=${generatedOrderId}`
+          })
+        });
+
+        const payzyData = await payzyRes.json();
+        if (payzyRes.ok && payzyData.success && payzyData.redirectUrl) {
+          clearCart();
+          window.location.href = payzyData.redirectUrl;
+          return;
+        } else {
+          const errMsg = payzyData.message || (payzyData.error?.message ? payzyData.error.message : (typeof payzyData.error === 'string' ? payzyData.error : 'Payzy payment initialization failed.'));
+          throw new Error(errMsg);
+        }
+      } catch (err: any) {
+        console.error('Payzy execution error:', err);
+        setPaymentError(err.message || 'Payzy payment initialization failed.');
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     // PayHere Gateway Integration (Direct HTML Form POST Submission)
     if (formData.paymentMethod === 'payhere') {
@@ -428,7 +524,7 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-mono text-zinc-400 block mb-1">Phone Number *</label>
+                      <label className="text-xs font-mono text-zinc-400 block mb-1">Primary Phone Number *</label>
                       <input
                         type="tel"
                         name="phone"
@@ -439,6 +535,18 @@ export default function CheckoutPage() {
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:border-lime-400 focus:outline-none font-mono"
                       />
                     </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="text-xs font-mono text-zinc-400 block mb-1">Secondary Phone / WhatsApp (Optional)</label>
+                    <input
+                      type="tel"
+                      name="secondaryPhone"
+                      value={formData.secondaryPhone}
+                      onChange={handleInputChange}
+                      placeholder="0719876543 (Optional)"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:border-lime-400 focus:outline-none font-mono"
+                    />
                   </div>
                 </div>
 
@@ -537,8 +645,13 @@ export default function CheckoutPage() {
                         onChange={handleInputChange}
                         className="hidden"
                       />
-                      <span className="font-bold block text-white">Bank Transfer</span>
-                      <span className="text-[10px]">Commercial Bank Online Deposit</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold block text-white">Bank Transfer</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">3% OFF</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-bold block mt-1">
+                        Save 3% with Direct Bank Transfer (-{formatPrice(Math.round(subtotal * 0.03))})
+                      </span>
                     </label>
 
                     <label className={`p-4 rounded-xl border cursor-pointer transition-colors ${formData.paymentMethod === 'payhere' ? 'border-lime-400 bg-lime-500/10 text-lime-400' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}>
@@ -563,8 +676,13 @@ export default function CheckoutPage() {
                         onChange={handleInputChange}
                         className="hidden"
                       />
-                      <span className="font-bold block text-white">Payzy Gateway</span>
-                      <span className="text-[10px]">Direct Digital Checkout</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold block text-white">Payzy Gateway</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">+10% Fee</span>
+                      </div>
+                      <span className="text-[10px] text-amber-400 font-bold block mt-1">
+                        +10% Payzy Installment / Processing Fee (+{formatPrice(Math.round(baseTotal * 0.10))})
+                      </span>
                     </label>
 
                     <label className={`p-4 rounded-xl border cursor-pointer transition-colors ${formData.paymentMethod === 'cod' ? 'border-lime-400 bg-lime-500/10 text-lime-400' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}>
@@ -607,10 +725,22 @@ export default function CheckoutPage() {
                     <span>Subtotal</span>
                     <span className="text-white">{formatPrice(subtotal)}</span>
                   </div>
-                  {discountAmountLkr > 0 && (
+                  {promoDiscount > 0 && (
                     <div className="flex justify-between text-emerald-400">
-                      <span>Discount</span>
-                      <span>-{formatPrice(discountAmountLkr)}</span>
+                      <span>Promo Discount</span>
+                      <span>-{formatPrice(promoDiscount)}</span>
+                    </div>
+                  )}
+                  {paymentMethodAdjustment < 0 && (
+                    <div className="flex justify-between text-emerald-400 font-bold">
+                      <span>Bank Transfer Discount (3%)</span>
+                      <span>-{formatPrice(Math.abs(Math.round(paymentMethodAdjustment)))}</span>
+                    </div>
+                  )}
+                  {paymentMethodAdjustment > 0 && (
+                    <div className="flex justify-between text-amber-400 font-bold">
+                      <span>Payzy Processing Fee (10%)</span>
+                      <span>+{formatPrice(Math.round(paymentMethodAdjustment))}</span>
                     </div>
                   )}
                   <div className="flex justify-between">

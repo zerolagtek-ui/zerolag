@@ -3,6 +3,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, CartItem } from '@/types';
 
+interface AppliedPromoDetails {
+  id?: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountAmount?: number | null;
+}
+
 interface CartContextType {
   cart: CartItem[];
   addToCart: (product: Product) => void;
@@ -17,7 +26,8 @@ interface CartContextType {
   totalPriceLkr: number;
   appliedPromo: string | null;
   discountAmountLkr: number;
-  applyPromoCode: (code: string) => boolean;
+  applyPromoCode: (code: string) => Promise<{ success: boolean; message: string }>;
+  removePromoCode: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -27,7 +37,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [appliedPromoDetails, setAppliedPromoDetails] = useState<AppliedPromoDetails | null>(null);
 
   useEffect(() => {
     try {
@@ -82,28 +92,60 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = () => {
     setCart([]);
     setAppliedPromo(null);
-    setDiscountPercent(0);
+    setAppliedPromoDetails(null);
   };
 
-  const applyPromoCode = (code: string): boolean => {
-    const clean = code.trim().toUpperCase();
-    if (clean === 'ZEROLAG10' || clean === 'GAMER10') {
-      setAppliedPromo(clean);
-      setDiscountPercent(10);
-      return true;
-    }
-    if (clean === 'VIP20' || clean === 'PRO20') {
-      setAppliedPromo(clean);
-      setDiscountPercent(20);
-      return true;
-    }
-    return false;
+  const removePromoCode = () => {
+    setAppliedPromo(null);
+    setAppliedPromoDetails(null);
   };
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotalLkr = cart.reduce((sum, item) => sum + item.product.priceLkr * item.quantity, 0);
 
-  const discountAmountLkr = Math.round((subtotalLkr * discountPercent) / 100);
+  const applyPromoCode = async (code: string): Promise<{ success: boolean; message: string }> => {
+    const clean = code.trim().toUpperCase();
+    if (!clean) {
+      return { success: false, message: 'Please enter a promo code' };
+    }
+
+    try {
+      const res = await fetch('/api/promo-codes/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: clean, subtotalLkr })
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setAppliedPromo(data.promoCode.code);
+        setAppliedPromoDetails(data.promoCode);
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Invalid promo code' };
+      }
+    } catch (err: unknown) {
+      console.error('Failed to validate promo code:', err);
+      return { success: false, message: 'Failed to validate promo code. Please try again.' };
+    }
+  };
+
+  // Dynamically calculate discount amount based on current cart subtotal and active promo rule
+  let calculatedDiscount = 0;
+  if (appliedPromoDetails && subtotalLkr > 0) {
+    const minOrder = Number(appliedPromoDetails.minOrderAmount) || 0;
+    if (minOrder <= 0 || subtotalLkr >= minOrder) {
+      if (appliedPromoDetails.discountType === 'percentage') {
+        calculatedDiscount = Math.round((subtotalLkr * appliedPromoDetails.discountValue) / 100);
+        if (appliedPromoDetails.maxDiscountAmount && calculatedDiscount > appliedPromoDetails.maxDiscountAmount) {
+          calculatedDiscount = appliedPromoDetails.maxDiscountAmount;
+        }
+      } else {
+        calculatedDiscount = Math.min(appliedPromoDetails.discountValue, subtotalLkr);
+      }
+    }
+  }
+
+  const discountAmountLkr = Math.max(0, calculatedDiscount);
   const totalPriceLkr = Math.max(0, subtotalLkr - discountAmountLkr);
 
   return (
@@ -122,7 +164,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         totalPriceLkr,
         appliedPromo,
         discountAmountLkr,
-        applyPromoCode
+        applyPromoCode,
+        removePromoCode
       }}
     >
       {children}

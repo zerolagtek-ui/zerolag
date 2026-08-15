@@ -51,6 +51,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Reviews state
   const [approvedReviews, setApprovedReviews] = useState<ReviewItem[]>([]);
@@ -78,6 +79,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   useEffect(() => {
     async function loadProduct() {
+      setIsLoading(true);
       const matchProduct = (p: Product) => {
         if (!p) return false;
         const target = id;
@@ -94,27 +96,34 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         );
       };
 
-      // 1. Sync from DB / storeManager
-      const dbProducts = await syncProductsFromDatabase();
-      setAllProducts(dbProducts);
+      try {
+        // 1. Sync from DB / storeManager
+        const dbProducts = await syncProductsFromDatabase();
+        setAllProducts(dbProducts);
 
-      const foundInDb = dbProducts.find(matchProduct);
-      if (foundInDb) {
-        setProduct(foundInDb);
-        setSelectedImage(foundInDb.image);
-        fetchApprovedReviews(foundInDb.id);
-        return;
-      }
+        const foundInDb = dbProducts.find(matchProduct);
+        if (foundInDb) {
+          setProduct(foundInDb);
+          setSelectedImage(foundInDb.image);
+          fetchApprovedReviews(foundInDb.id);
+          setIsLoading(false);
+          return;
+        }
 
-      // 2. Final fallback: Check local storage cache before showing "Product Not Found"
-      const productsList = getStoredProducts();
-      setAllProducts(prev => (prev.length > 0 ? prev : productsList));
+        // 2. Final fallback: Check local storage cache before showing "Product Not Found"
+        const productsList = getStoredProducts();
+        setAllProducts(prev => (prev.length > 0 ? prev : productsList));
 
-      const foundInCache = productsList.find(matchProduct);
-      if (foundInCache) {
-        setProduct(foundInCache);
-        setSelectedImage(foundInCache.image);
-        fetchApprovedReviews(foundInCache.id);
+        const foundInCache = productsList.find(matchProduct);
+        if (foundInCache) {
+          setProduct(foundInCache);
+          setSelectedImage(foundInCache.image);
+          fetchApprovedReviews(foundInCache.id);
+        }
+      } catch (e) {
+        console.error('Error loading product:', e);
+      } finally {
+        setIsLoading(false);
       }
     }
 
@@ -171,6 +180,80 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       setSubmittingReview(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="bg-black text-white min-h-screen flex flex-col justify-between font-sans">
+        <Navbar />
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-8 animate-pulse">
+          {/* Breadcrumb Skeleton */}
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-16 bg-zinc-800 rounded-md"></div>
+            <div className="h-4 w-4 bg-zinc-800 rounded-md"></div>
+            <div className="h-4 w-24 bg-zinc-800 rounded-md"></div>
+            <div className="h-4 w-4 bg-zinc-800 rounded-md"></div>
+            <div className="h-4 w-36 bg-zinc-800 rounded-md"></div>
+          </div>
+
+          {/* Product Grid Layout Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12">
+            {/* Left Column: Gallery Box Skeleton */}
+            <div className="lg:col-span-6 space-y-4">
+              <div className="relative aspect-square w-full rounded-3xl bg-[#0a0c10] border border-zinc-800 flex items-center justify-center p-6">
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <div className="w-10 h-10 rounded-full border-2 border-lime-400 border-t-transparent animate-spin shadow-[0_0_15px_rgba(163,230,53,0.5)]" />
+                  <span className="text-xs font-mono text-lime-400 font-bold tracking-wider animate-pulse">
+                    Loading Hardware Specifications...
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-20 h-20 rounded-2xl bg-zinc-800/70 border border-zinc-800"></div>
+                <div className="w-20 h-20 rounded-2xl bg-zinc-800/70 border border-zinc-800"></div>
+                <div className="w-20 h-20 rounded-2xl bg-zinc-800/70 border border-zinc-800"></div>
+              </div>
+            </div>
+
+            {/* Right Column: Title, Price, & Action Skeletons */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="space-y-3 border-b border-zinc-800 pb-4">
+                <div className="h-8 w-3/4 bg-zinc-800 rounded-lg"></div>
+                <div className="h-4 w-1/3 bg-zinc-800/80 rounded-md"></div>
+              </div>
+
+              {/* Price Skeleton Box */}
+              <div className="p-6 rounded-2xl bg-[#0a0c10] border border-zinc-800 space-y-3">
+                <div className="h-9 w-40 bg-zinc-800 rounded-lg"></div>
+                <div className="h-4 w-48 bg-zinc-800/60 rounded-md"></div>
+              </div>
+
+              {/* Overview Skeleton */}
+              <div className="space-y-2 pt-1">
+                <div className="h-4 w-32 bg-zinc-800 rounded-md"></div>
+                <div className="h-16 w-full bg-zinc-800/50 rounded-xl"></div>
+              </div>
+
+              {/* Warranty Badge Skeleton */}
+              <div className="h-16 w-full bg-zinc-900/60 border border-zinc-800 rounded-2xl"></div>
+
+              {/* Quantity & Cart Action Skeleton */}
+              <div className="space-y-4 pt-2">
+                <div className="h-8 w-40 bg-zinc-800/70 rounded-xl"></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="h-14 w-full bg-lime-500/20 border border-lime-500/30 rounded-xl"></div>
+                  <div className="h-14 w-full bg-zinc-900 border border-zinc-800 rounded-xl"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+        <CartDrawer onProceedToCheckout={() => setIsCheckoutOpen(true)} />
+        <PayHereCheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} />
+        <AiAssistantDrawer />
+      </div>
+    );
+  }
 
   if (!product) {
     return (

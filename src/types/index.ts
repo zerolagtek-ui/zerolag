@@ -88,6 +88,7 @@ export interface OrderDetails {
   customerName: string;
   email: string;
   phone: string;
+  secondaryPhone?: string;
   address: string;
   city: string;
   postalCode: string;

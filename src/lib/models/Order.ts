@@ -5,6 +5,7 @@ export interface IOrderDocument extends Document {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
+  secondary_phone?: string;
   shipping_address: string;
   payment_method: string;
   shipping_method?: string;
@@ -22,6 +23,7 @@ const OrderSchema = new Schema<IOrderDocument>(
     customer_name: { type: String, required: true },
     customer_email: { type: String, required: true },
     customer_phone: { type: String, required: true },
+    secondary_phone: { type: String },
     shipping_address: { type: String, required: true },
     payment_method: { type: String, required: true },
     shipping_method: { type: String, default: 'Trans Express' },

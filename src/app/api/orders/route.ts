@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       customer_name: body.customerName || body.customer_name || 'Valued Customer',
       customer_email: body.customerEmail || body.email || '',
       customer_phone: body.customerPhone || body.phone || '',
+      secondary_phone: body.secondaryPhone || body.secondary_phone || '',
       shipping_address: body.shippingAddress || body.address || '',
       payment_method: body.paymentMethod || body.payment_method || 'bank-transfer',
       shipping_method: body.shippingMethod || body.shipping_method || 'Trans Express',

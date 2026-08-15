@@ -53,7 +53,7 @@ export function ProductCard({ product }: { product: Product }) {
       {/* Image Container */}
       <Link
         href={`/product/${productSlug}`}
-        className="relative h-32 sm:h-48 w-full rounded-xl overflow-hidden bg-zinc-950 mb-2 sm:mb-4 flex items-center justify-center cursor-pointer group/img block"
+        className="relative aspect-square w-full rounded-xl overflow-hidden bg-[#0c0d12] border border-zinc-800/80 p-3 sm:p-4 mb-2 sm:mb-4 flex items-center justify-center cursor-pointer group/img block"
       >
         <Image
           src={imgSrc}
@@ -66,7 +66,7 @@ export function ProductCard({ product }: { product: Product }) {
               setImgSrc(FALLBACK_IMAGE);
             }
           }}
-          className="object-cover group-hover/img:scale-105 transition-transform duration-500"
+          className="object-contain p-3 group-hover/img:scale-105 transition-transform duration-300"
         />
 
         <div className="absolute inset-0 bg-slate-950/60 opacity-0 sm:group-hover/img:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
