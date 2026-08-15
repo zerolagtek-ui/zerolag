@@ -251,7 +251,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       } catch (err: any) {
         console.error('PayHere init failed:', err);
         setIsSubmitting(false);
-        setPaymentError(err.message || 'Failed to initialize PayHere Checkout.');
+        setPaymentError('Failed to load PayHere Gateway script. If you are using an AdBlocker or Brave Shields, please disable it for this site or select Bank Transfer / COD.');
         return;
       }
     }
