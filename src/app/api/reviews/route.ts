@@ -84,7 +84,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: 'ID and status required' }, { status: 400 });
     }
 
-    const doc = await ReviewModel.findByIdAndUpdate(id, { status }, { new: true });
+    const doc = await ReviewModel.findByIdAndUpdate(id, { status }, { returnDocument: 'after' });
     return NextResponse.json({ success: true, review: doc });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Failed to update review';

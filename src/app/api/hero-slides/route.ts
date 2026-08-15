@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
     };
 
-    const doc = await HeroSlideModel.findOneAndUpdate({ id: slideId }, payload, { upsert: true, new: true });
+    const doc = await HeroSlideModel.findOneAndUpdate({ id: slideId }, payload, { returnDocument: 'after', upsert: true });
 
     return NextResponse.json({ success: true, slide: doc });
   } catch (error: unknown) {

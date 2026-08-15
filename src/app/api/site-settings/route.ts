@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const doc = await SiteSettingsModel.findOneAndUpdate(
       { key },
       { key, value: String(value || ''), updated_at: new Date() },
-      { upsert: true, new: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     return NextResponse.json({ success: true, setting: doc });

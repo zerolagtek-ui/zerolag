@@ -32,7 +32,7 @@ export async function autoMigrateSchema(): Promise<{ success: boolean; message?:
           created_at: new Date()
         }
       },
-      { upsert: true, new: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     console.log('[MongoDB Auto Migration]: Admin user seeded/verified successfully.');

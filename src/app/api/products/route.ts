@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       warranty: body.warranty || '1 Year Official Warranty'
     };
 
-    const doc = await ProductModel.findOneAndUpdate({ id: productId }, payload, { upsert: true, new: true });
+    const doc = await ProductModel.findOneAndUpdate({ id: productId }, payload, { returnDocument: 'after', upsert: true });
 
     return NextResponse.json({ success: true, product: doc });
   } catch (error: unknown) {
