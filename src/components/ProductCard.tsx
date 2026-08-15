@@ -1,16 +1,28 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Product } from '@/types';
 import { useCart } from '@/context/CartContext';
 import { formatPrice, getProductSlug } from '@/lib/productsData';
 import { Star, ShoppingCart, Eye, ShieldCheck } from 'lucide-react';
 
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+
 export function ProductCard({ product }: { product: Product }) {
   const { addToCart } = useCart();
   const productSlug = getProductSlug(product);
+
+  const [imgSrc, setImgSrc] = useState<string>(product.image || FALLBACK_IMAGE);
+
+  useEffect(() => {
+    setImgSrc(product.image || FALLBACK_IMAGE);
+  }, [product.image]);
+
+  const sellingPrice = Number(product.priceLkr ?? product.price ?? 0);
+  const origPriceVal = Number(product.originalPriceLkr ?? product.originalPrice ?? product.original_price ?? 0);
+  const showDiscount = !isNaN(origPriceVal) && origPriceVal > 0 && origPriceVal > sellingPrice;
 
   return (
     <div className="group relative rounded-2xl bg-[#0a0c10] border border-zinc-800 text-white shadow-sm hover:shadow-md hover:border-lime-500/50 p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1">
@@ -43,8 +55,13 @@ export function ProductCard({ product }: { product: Product }) {
         className="relative h-32 sm:h-48 w-full rounded-xl overflow-hidden bg-zinc-950 mb-2 sm:mb-4 flex items-center justify-center cursor-pointer group/img block"
       >
         <img
-          src={product.image}
+          src={imgSrc}
           alt={product.name}
+          onError={() => {
+            if (imgSrc !== FALLBACK_IMAGE) {
+              setImgSrc(FALLBACK_IMAGE);
+            }
+          }}
           className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
           loading="lazy"
         />
@@ -103,13 +120,13 @@ export function ProductCard({ product }: { product: Product }) {
         {/* Pricing & Actions */}
         <div className="pt-2 sm:pt-3 mt-2 sm:mt-3 border-t border-zinc-800/80 flex items-center justify-between gap-1">
           <Link href={`/product/${productSlug}`} className="cursor-pointer truncate">
-            {product.originalPriceLkr && (
+            {showDiscount && (
               <span className="text-[9px] sm:text-[11px] text-zinc-500 line-through block font-mono">
-                {formatPrice(product.originalPriceLkr)}
+                {formatPrice(origPriceVal)}
               </span>
             )}
             <span className="text-xs sm:text-base font-bold font-mono text-lime-400 truncate block">
-              {formatPrice(product.priceLkr)}
+              {formatPrice(sellingPrice)}
             </span>
           </Link>
 

@@ -5,7 +5,7 @@ import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { getStoredProducts, syncProductsFromDatabase } from '@/lib/storeManager';
 import { Product } from '@/types';
-import { formatPrice, getProductSlug, generateSlug } from '@/lib/productsData';
+import { formatPrice, getProductSlug, generateSlug, isCategoryMatch } from '@/lib/productsData';
 import { useCart } from '@/context/CartContext';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
@@ -54,6 +54,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   // Reviews state
   const [approvedReviews, setApprovedReviews] = useState<ReviewItem[]>([]);
+  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
   const [reviewerName, setReviewerName] = useState('');
   const [reviewerEmail, setReviewerEmail] = useState('');
   const [reviewRating, setReviewRating] = useState<number>(5);
@@ -139,7 +140,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     setReviewNotice('');
 
     try {
-      await fetch('/api/reviews', {
+      const res = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,12 +152,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           status: 'pending'
         })
       });
-
-      setReviewNotice('Thank you! Your review has been submitted and is pending admin approval.');
-      setReviewerName('');
-      setReviewerEmail('');
-      setReviewComment('');
-      setReviewRating(5);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReviewNotice('Thank you! Your review has been submitted for admin verification.');
+        setReviewerName('');
+        setReviewerEmail('');
+        setReviewComment('');
+        setTimeout(() => {
+          setIsReviewFormOpen(false);
+        }, 2200);
+      } else {
+        setReviewNotice(data.error || 'Failed to submit review. Please try again.');
+      }
     } catch (err: unknown) {
       console.error('Review submission error:', err);
       setReviewNotice('Thank you! Your review was recorded for moderation.');
@@ -190,13 +197,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
+  const storeWhatsapp = process.env.NEXT_PUBLIC_STORE_WHATSAPP_NUMBER || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
   const whatsappMsg = `Hello ZeroLag Tek! I would like to order: ${product.name} (${formatPrice(product.priceLkr)})`;
-  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMsg)}`;
+  const whatsappUrl = `https://wa.me/${storeWhatsapp}?text=${encodeURIComponent(whatsappMsg)}`;
 
-  const relatedProducts = allProducts
-    .filter(p => p.category === product.category && p.id !== product.id)
-    .slice(0, 4);
+  // Find category or brand matches excluding current product
+  let relatedProducts = allProducts.filter(
+    p => (isCategoryMatch(p.category, product.category) || p.brand === product.brand) && p.id !== product.id
+  );
+
+  // Fallback to featured or remaining catalog products if fewer than 2 matches exist
+  if (relatedProducts.length < 2) {
+    const fallbackProducts = allProducts.filter(p => p.id !== product.id);
+    const combined = Array.from(new Set([...relatedProducts, ...fallbackProducts]));
+    relatedProducts = combined.slice(0, 4);
+  } else {
+    relatedProducts = relatedProducts.slice(0, 4);
+  }
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col font-sans">
@@ -226,8 +243,14 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           <div className="lg:col-span-6 space-y-4">
             <div className="relative aspect-square w-full rounded-3xl overflow-hidden bg-[#0a0c10] border border-zinc-800 flex items-center justify-center p-6 group">
               <img
-                src={selectedImage || product.image}
+                src={selectedImage || product.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600'}
                 alt={product.name}
+                onError={(e) => {
+                  const fallback = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+                  if (e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                  }
+                }}
                 className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500"
               />
               {product.badge && (
@@ -239,12 +262,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
             {/* Thumbnail Carousel */}
             {(() => {
-              const allImages = Array.from(new Set([product.image, ...(product.galleryImages || [])].filter(Boolean)));
-              if (allImages.length <= 1) return null;
+              const uniqueImages = Array.from(new Set([product.image, ...(product.galleryImages || [])].filter(Boolean)));
+              if (uniqueImages.length <= 1) return null;
 
               return (
                 <div className="flex items-center gap-3 overflow-x-auto pb-2">
-                  {allImages.map((img, idx) => (
+                  {uniqueImages.map((img, idx) => (
                     <button
                       key={idx}
                       onClick={() => setSelectedImage(img)}
@@ -254,7 +277,17 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                           : 'border-zinc-800 opacity-60 hover:opacity-100'
                       }`}
                     >
-                      <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover rounded-xl" />
+                      <img
+                        src={img}
+                        alt={`Thumbnail ${idx + 1}`}
+                        onError={(e) => {
+                          const fallback = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+                          if (e.currentTarget.src !== fallback) {
+                            e.currentTarget.src = fallback;
+                          }
+                        }}
+                        className="w-full h-full object-cover rounded-xl"
+                      />
                     </button>
                   ))}
                 </div>
@@ -265,9 +298,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           {/* Right Column: Info & Actions */}
           <div className="lg:col-span-6 space-y-6">
             <div className="space-y-2 border-b border-zinc-800 pb-4">
-              <span className="text-xs font-mono text-lime-400 uppercase tracking-widest block font-bold">
-                {product.brand} • {product.category}
-              </span>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
                 {product.name}
               </h1>
@@ -299,25 +329,33 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             </div>
 
             {/* Price Box */}
-            <div className="p-6 rounded-2xl bg-[#0a0c10] border border-zinc-800 space-y-3">
-              <div className="flex items-baseline gap-3">
-                <span className="text-3xl font-black text-lime-400 font-mono tracking-tight">
-                  {formatPrice(product.priceLkr)}
-                </span>
-                {product.originalPriceLkr && (
-                  <span className="text-base text-zinc-500 line-through font-mono">
-                    {formatPrice(product.originalPriceLkr)}
-                  </span>
-                )}
-              </div>
+            {(() => {
+              const sellingPrice = Number(product.priceLkr ?? product.price ?? 0);
+              const origPriceVal = Number(product.originalPriceLkr ?? product.originalPrice ?? product.original_price ?? 0);
+              const showDiscount = !isNaN(origPriceVal) && origPriceVal > 0 && origPriceVal > sellingPrice;
 
-              <div className="flex items-center gap-2 text-xs font-mono">
-                <span className={`w-2 h-2 rounded-full ${product.inStock ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-                <span className={product.inStock ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
-                  {product.inStock ? 'In Stock — Ready for Islandwide Dispatch' : 'Out of Stock'}
-                </span>
-              </div>
-            </div>
+              return (
+                <div className="p-6 rounded-2xl bg-[#0a0c10] border border-zinc-800 space-y-3">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-3xl font-black text-lime-400 font-mono tracking-tight">
+                      {formatPrice(sellingPrice)}
+                    </span>
+                    {showDiscount && (
+                      <span className="text-base text-zinc-500 line-through font-mono">
+                        {formatPrice(origPriceVal)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs font-mono">
+                    <span className={`w-2 h-2 rounded-full ${product.inStock ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+                    <span className={product.inStock ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                      {product.inStock ? 'In Stock — Ready for Islandwide Dispatch' : 'Out of Stock'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Description */}
             {product.description && (
@@ -435,27 +473,127 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         )}
 
         {/* Real Customer Reviews Section */}
-        <div className="space-y-8 pt-8 border-t border-zinc-800">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2 font-mono">
-              <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
-              <span>CUSTOMER REVIEWS ({approvedReviews.length})</span>
-            </h3>
-            <span className="text-xs font-mono text-zinc-400">Average Rating: <strong className="text-lime-400">{dynamicAvgRating} / 5.0</strong></span>
+        <div className="space-y-6 pt-8 border-t border-zinc-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 font-mono">
+                <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
+                <span>CUSTOMER REVIEWS ({approvedReviews.length})</span>
+              </h3>
+              <p className="text-xs font-mono text-zinc-400 mt-1">Average Rating: <strong className="text-lime-400">{dynamicAvgRating} / 5.0</strong></p>
+            </div>
+
+            <button
+              onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold font-mono text-xs flex items-center gap-2 shadow-md shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer self-start sm:self-auto"
+            >
+              <Send className="w-4 h-4" />
+              <span>{isReviewFormOpen ? '✖ Close Form' : '✍️ Write a Review'}</span>
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            {/* Approved Reviews List */}
-            <div className="lg:col-span-7 space-y-4">
-              {approvedReviews.length === 0 ? (
-                <div className="p-8 rounded-3xl bg-[#0a0c10] border border-zinc-800 text-center space-y-2">
-                  <MessageSquare className="w-8 h-8 text-zinc-600 mx-auto" />
-                  <p className="text-xs font-mono text-zinc-400">No verified customer reviews yet for this hardware item.</p>
-                  <p className="text-[11px] font-mono text-lime-400">Be the first gamer to write a review below!</p>
+          {/* Collapsible Write a Review Form */}
+          {isReviewFormOpen && (
+            <div className="bg-[#0a0c10] border border-lime-500/30 rounded-3xl p-6 space-y-4 animate-in fade-in duration-200">
+              <h4 className="font-bold text-white text-sm font-mono flex items-center gap-2">
+                <Send className="w-4 h-4 text-lime-400" />
+                <span>WRITE A CUSTOMER REVIEW</span>
+              </h4>
+
+              {reviewNotice && (
+                <div className="p-3 rounded-xl bg-lime-400/10 border border-lime-400/30 text-lime-400 text-xs font-mono flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 shrink-0" />
+                  <span>{reviewNotice}</span>
                 </div>
-              ) : (
-                approvedReviews.map(rev => (
+              )}
+
+              <form onSubmit={handleReviewSubmit} className="space-y-4 text-xs font-mono max-w-2xl">
+                <div>
+                  <label className="text-zinc-400 block mb-1">Star Rating</label>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setReviewRating(star)}
+                        className="p-1 text-amber-400 hover:scale-110 transition-transform cursor-pointer"
+                      >
+                        <Star className={`w-5 h-5 ${star <= reviewRating ? 'fill-current' : 'text-zinc-700'}`} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Your Name *</label>
+                    <input
+                      type="text"
+                      value={reviewerName}
+                      onChange={e => setReviewerName(e.target.value)}
+                      placeholder="Kasun Perera"
+                      required
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-lime-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Your Email *</label>
+                    <input
+                      type="email"
+                      value={reviewerEmail}
+                      onChange={e => setReviewerEmail(e.target.value)}
+                      placeholder="kasun@example.com"
+                      required
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-lime-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-zinc-400 block mb-1">Your Feedback / Review *</label>
+                  <textarea
+                    value={reviewComment}
+                    onChange={e => setReviewComment(e.target.value)}
+                    rows={3}
+                    placeholder="Share your gaming experience with this hardware..."
+                    required
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-lime-400 font-sans text-xs"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={submittingReview}
+                    className="px-6 py-3 rounded-xl bg-lime-400 hover:bg-lime-300 text-slate-950 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{submittingReview ? 'Submitting Review...' : 'Submit Review'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsReviewFormOpen(false)}
+                    className="px-4 py-3 rounded-xl bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold hover:text-white transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Approved Reviews List */}
+          <div className="space-y-4">
+            {approvedReviews.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-[#0a0c10] border border-zinc-800 text-center space-y-2">
+                <MessageSquare className="w-8 h-8 text-zinc-600 mx-auto" />
+                <p className="text-xs font-mono text-zinc-400">No verified customer reviews yet for this hardware item.</p>
+                <p className="text-[11px] font-mono text-lime-400">Click "✍️ Write a Review" above to submit the first review!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {approvedReviews.map(rev => (
                   <div key={rev.id} className="p-5 rounded-2xl bg-[#0a0c10] border border-zinc-800 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -478,88 +616,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                       {new Date(rev.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                ))
-              )}
-            </div>
-
-            {/* Write a Review Form */}
-            <div className="lg:col-span-5 bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 space-y-4">
-              <h4 className="font-bold text-white text-sm font-mono flex items-center gap-2">
-                <Send className="w-4 h-4 text-lime-400" />
-                <span>WRITE A REVIEW</span>
-              </h4>
-
-              {reviewNotice && (
-                <div className="p-3 rounded-xl bg-lime-400/10 border border-lime-400/30 text-lime-400 text-xs font-mono flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 shrink-0" />
-                  <span>{reviewNotice}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleReviewSubmit} className="space-y-3 text-xs font-mono">
-                <div>
-                  <label className="text-zinc-400 block mb-1">Star Rating</label>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setReviewRating(star)}
-                        className="p-1 text-amber-400 hover:scale-110 transition-transform cursor-pointer"
-                      >
-                        <Star className={`w-5 h-5 ${star <= reviewRating ? 'fill-current' : 'text-zinc-700'}`} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-zinc-400 block mb-1">Your Name</label>
-                  <input
-                    type="text"
-                    value={reviewerName}
-                    onChange={e => setReviewerName(e.target.value)}
-                    placeholder="Name"
-                    required
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-lime-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-zinc-400 block mb-1">Your Email</label>
-                  <input
-                    type="email"
-                    value={reviewerEmail}
-                    onChange={e => setReviewerEmail(e.target.value)}
-                    placeholder="Email address"
-                    required
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-lime-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-zinc-400 block mb-1">Your Feedback / Review</label>
-                  <textarea
-                    value={reviewComment}
-                    onChange={e => setReviewComment(e.target.value)}
-                    rows={3}
-                    placeholder="Share your experience with this hardware..."
-                    required
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-lime-400 font-sans text-xs"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submittingReview}
-                  className="w-full py-3 rounded-xl bg-lime-400 hover:bg-lime-300 text-slate-950 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{submittingReview ? 'Submitting...' : 'Submit Review'}</span>
-                </button>
-              </form>
-            </div>
-
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -567,10 +626,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         {relatedProducts.length > 0 && (
           <div className="space-y-6 pt-10 border-t border-zinc-800">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white">
-                RELATED {product.category.replace('-', ' ').toUpperCase()} HARDWARE
+              <h3 className="text-xl font-bold text-white uppercase font-mono">
+                RELATED {product.category.replace('-', ' ')} HARDWARE
               </h3>
-              <Link href="/#catalog" className="text-xs font-mono text-lime-400 hover:underline">
+              <Link href="/#products" className="text-xs font-mono text-lime-400 hover:underline">
                 View All Catalog
               </Link>
             </div>

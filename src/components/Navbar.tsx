@@ -1,13 +1,33 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
-import { Category } from '@/types';
-import { getDynamicCategories, getStoredSiteLogo, syncSiteLogoFromSupabase, cleanLogoUrl } from '@/lib/storeManager';
-import { normalizeCategory, isCategoryMatch } from '@/lib/productsData';
-import { ShoppingBag, Bot, Shield, Search, Menu, X, MessageSquare, User, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
+import { Category, Product } from '@/types';
+import {
+  getDynamicCategories,
+  getStoredSiteLogo,
+  syncSiteLogoFromSupabase,
+  cleanLogoUrl,
+  getStoredProducts
+} from '@/lib/storeManager';
+import { formatPrice } from '@/lib/productsData';
+import {
+  ShoppingBag,
+  Bot,
+  Shield,
+  Search,
+  Menu,
+  X,
+  MessageSquare,
+  User,
+  ChevronDown,
+  LogOut,
+  LayoutDashboard,
+  Package,
+  ArrowRight
+} from 'lucide-react';
 
 export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selectedCategory }: {
   onSearchChange?: (q: string) => void;
@@ -16,13 +36,33 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   selectedCategory?: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { itemCount, setIsCartOpen, setIsAiOpen } = useCart();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [siteLogo, setSiteLogo] = useState<string>(() => cleanLogoUrl(getStoredSiteLogo()));
   const [logoError, setLogoError] = useState<boolean>(false);
+
+  // Search autocomplete state
+  const [inputVal, setInputVal] = useState<string>(searchQuery || '');
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+
+  const desktopSearchRef = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (searchQuery !== undefined) {
+      setInputVal(searchQuery);
+    }
+  }, [searchQuery]);
+
+  const loadProducts = () => {
+    setProducts(getStoredProducts());
+  };
 
   const loadLogo = async () => {
     const cached = cleanLogoUrl(getStoredSiteLogo());
@@ -48,7 +88,6 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
 
     const hasLocalAuthFlag = sessionStorage.getItem('zerolag_admin_auth') === 'true';
 
-    // Only call /api/admin/verify if local session indicates admin, or accessing /admin, or explicit forceFetch event
     if (!hasLocalAuthFlag && !pathname.startsWith('/admin') && !forceFetch) {
       setIsAdminLoggedIn(false);
       return;
@@ -62,7 +101,6 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
         setIsAdminLoggedIn(true);
         sessionStorage.setItem('zerolag_admin_auth', 'true');
       } else {
-        // On 401 Unauthorized or failure, stop retrying immediately
         setIsAdminLoggedIn(false);
         sessionStorage.removeItem('zerolag_admin_auth');
       }
@@ -84,32 +122,99 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
   };
 
-  // Sync categories on route changes (logo is hydrated once on mount & via events)
+  // Sync categories on route changes
   useEffect(() => {
     syncCategories();
   }, [pathname]);
 
-  // Initial Auth check, Logo fetch on mount & global event listeners
+  // Initial Auth check, Logo fetch, Products load & event listeners
   useEffect(() => {
     loadLogo();
+    loadProducts();
     checkAdminAuth();
 
     const handleAuthChanged = () => checkAdminAuth(true);
 
     window.addEventListener('zerolag-categories-updated', syncCategories);
+    window.addEventListener('zerolag-products-updated', loadProducts);
     window.addEventListener('zerolag-admin-auth-changed', handleAuthChanged);
     window.addEventListener('zerolag-logo-updated', loadLogo);
     window.addEventListener('site_logo_updated', loadLogo);
+
     return () => {
       window.removeEventListener('zerolag-categories-updated', syncCategories);
+      window.removeEventListener('zerolag-products-updated', loadProducts);
       window.removeEventListener('zerolag-admin-auth-changed', handleAuthChanged);
       window.removeEventListener('zerolag-logo-updated', loadLogo);
       window.removeEventListener('site_logo_updated', loadLogo);
     };
   }, []);
 
-  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
-  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('Hello ZeroLag Tek! I would like to place an order.')}`;
+  // Close autocomplete on click outside or Escape key
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        desktopSearchRef.current &&
+        !desktopSearchRef.current.contains(event.target as Node) &&
+        mobileSearchRef.current &&
+        !mobileSearchRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Live matching search results (across name, brand, category, description)
+  const matchingProducts = inputVal.trim()
+    ? products.filter((p) => {
+        const q = inputVal.toLowerCase().trim();
+        const nameMatch = (p.name || '').toLowerCase().includes(q);
+        const brandMatch = (p.brand || '').toLowerCase().includes(q);
+        const categoryMatch = (p.category || '').toLowerCase().includes(q);
+        const descMatch = (p.description || '').toLowerCase().includes(q);
+        return nameMatch || brandMatch || categoryMatch || descMatch;
+      })
+    : [];
+
+  const handleInputChange = (val: string) => {
+    setInputVal(val);
+    if (onSearchChange) onSearchChange(val);
+    setIsDropdownOpen(val.trim().length > 0);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsDropdownOpen(false);
+
+    if (onSearchChange) {
+      onSearchChange(inputVal);
+    }
+
+    if (pathname === '/') {
+      const element = document.getElementById('products');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      router.push(`/?search=${encodeURIComponent(inputVal)}#products`);
+    }
+  };
+
+  const storeWhatsapp = process.env.NEXT_PUBLIC_STORE_WHATSAPP_NUMBER || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
+  const whatsappUrl = `https://wa.me/${storeWhatsapp}?text=${encodeURIComponent('Hello ZeroLag Tek! I would like to place an order.')}`;
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-black/90 text-white border-b border-zinc-800 transition-colors shadow-sm">
@@ -130,7 +235,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
           className="mx-auto md:mx-0 flex items-center gap-1 sm:gap-1.5 bg-slate-950 text-lime-400 px-2.5 sm:px-3 py-0.5 rounded-full font-mono text-[10px] sm:text-[11px] hover:bg-slate-900 border border-lime-400/40 transition-all font-bold truncate"
         >
           <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-lime-400 fill-lime-400/20 shrink-0" />
-          <span className="truncate">WhatsApp Order: +{whatsappNumber}</span>
+          <span className="truncate">WhatsApp Order: +{storeWhatsapp}</span>
         </a>
       </div>
 
@@ -171,16 +276,97 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
             </div>
           </Link>
 
-          {/* Search Bar - Desktop Only */}
-          <div className="hidden md:flex flex-1 max-w-md mx-4 lg:mx-6 relative">
-            <input
-              type="text"
-              placeholder="Search mice, mechanical keyboards, routers..."
-              value={searchQuery || ''}
-              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-700/80 rounded-full py-2.5 pl-11 pr-4 text-xs lg:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 focus:ring-1 focus:ring-lime-400/50 transition-all font-mono"
-            />
-            <Search className="w-4 h-4 text-lime-400 absolute left-4 top-3.5" />
+          {/* Search Bar with Instant Autocomplete Dropdown - Desktop */}
+          <div ref={desktopSearchRef} className="hidden md:flex flex-1 max-w-md mx-4 lg:mx-6 relative">
+            <form onSubmit={handleSearchSubmit} className="w-full relative">
+              <input
+                type="text"
+                placeholder="Search mice, mechanical keyboards, routers..."
+                value={inputVal}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onFocus={() => setIsDropdownOpen(inputVal.trim().length > 0)}
+                className="w-full bg-zinc-900 border border-zinc-700/80 rounded-full py-2.5 pl-11 pr-10 text-xs lg:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 focus:ring-1 focus:ring-lime-400/50 transition-all font-mono"
+              />
+              <button
+                type="submit"
+                className="absolute left-3.5 top-3 text-lime-400 hover:scale-110 transition-transform cursor-pointer"
+                title="Search"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+              {inputVal && (
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('')}
+                  className="absolute right-3.5 top-3 text-zinc-500 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </form>
+
+            {/* Desktop Autocomplete Dropdown */}
+            {isDropdownOpen && inputVal.trim().length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-[#0a0c10] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 font-mono text-xs animate-in fade-in duration-150">
+                <div className="p-3 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-400 font-bold uppercase">
+                    Matching Hardware ({matchingProducts.length})
+                  </span>
+                  <span className="text-[10px] text-zinc-500">ESC to close</span>
+                </div>
+
+                {matchingProducts.length > 0 ? (
+                  <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800/40">
+                    {matchingProducts.slice(0, 5).map((prod) => (
+                      <Link
+                        key={prod.id}
+                        href={`/product/${prod.id}`}
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          if (onSearchChange) onSearchChange('');
+                          setInputVal('');
+                        }}
+                        className="p-3 flex items-center gap-3 hover:bg-lime-400/10 transition-colors group cursor-pointer"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                          {prod.image ? (
+                            <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
+                          ) : (
+                            <Package className="w-5 h-5 text-zinc-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white font-bold block truncate group-hover:text-lime-400 transition-colors">
+                            {prod.name}
+                          </span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+                              {prod.category}
+                            </span>
+                            {prod.brand && <span className="text-[10px] text-zinc-400">{prod.brand}</span>}
+                          </div>
+                        </div>
+                        <span className="text-lime-400 font-bold shrink-0">
+                          {formatPrice(prod.priceLkr)}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-zinc-500 text-xs">
+                    No hardware matching "{inputVal}"
+                  </div>
+                )}
+
+                <button
+                  onClick={handleSearchSubmit}
+                  className="w-full p-3 bg-zinc-950 hover:bg-zinc-900 border-t border-zinc-800 text-lime-400 font-bold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>View all results for "{inputVal}"</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Right Action Icons Group */}
@@ -244,83 +430,130 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
             ) : (
               <Link
                 href="/login"
-                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-lime-400 font-bold text-xs font-mono transition-all"
-                title="Sign In"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-mono text-zinc-300 hover:text-white transition-all"
+                title="Admin Sign In"
               >
                 <User className="w-4 h-4 text-lime-400" />
                 <span className="hidden sm:inline">Sign In</span>
               </Link>
             )}
 
-            {/* Shopping Cart Button */}
+            {/* Cart Button with Counter Badge */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 transition-all cursor-pointer"
-              aria-label="Shopping Cart"
-              title="View Cart"
+              className="relative p-2 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-mono font-bold text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer"
+              title="Shopping Cart"
             >
-              <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden sm:inline">Cart</span>
               {itemCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-[10px] sm:text-xs w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow-lg shadow-lime-400/50">
+                <span className="bg-slate-950 text-lime-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-lime-400/40">
                   {itemCount}
                 </span>
               )}
             </button>
 
-            {/* Mobile Hamburger Menu button */}
+            {/* Mobile Menu Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 transition-colors cursor-pointer"
-              aria-label="Toggle Mobile Menu"
+              className="md:hidden p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors"
+              aria-label="Toggle Navigation Drawer"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
+
           </div>
         </div>
-
-        {/* Category Shortcuts Sub-Nav - Desktop */}
-        <div className="hidden lg:flex items-center gap-2 py-2 overflow-x-auto bg-[#07080b]/95 border-t border-b border-zinc-800/80 text-xs font-mono scrollbar-none px-2 rounded-xl mb-1">
-          <span className="text-zinc-400 text-[11px] mr-2">Categories:</span>
-          <button
-            onClick={() => onSelectCategory && onSelectCategory('all')}
-            className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition-colors ${
-              !selectedCategory || normalizeCategory(selectedCategory) === 'all'
-                ? 'bg-lime-400 text-slate-950 font-bold'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            All Products
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => onSelectCategory && onSelectCategory(cat.id)}
-              className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition-colors ${
-                isCategoryMatch(selectedCategory, cat.id)
-                  ? 'bg-lime-400 text-slate-950 font-bold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-
       </div>
 
       {/* Mobile Navigation Drawer / Menu Modal */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-zinc-950 border-t border-b border-zinc-800 px-4 py-4 space-y-4 shadow-2xl animate-fade-in">
-          {/* Mobile Search Input */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search hardware, mice, keyboards..."
-              value={searchQuery || ''}
-              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 font-mono"
-            />
-            <Search className="w-4 h-4 text-lime-400 absolute left-3.5 top-3" />
+          
+          {/* Mobile Search Input with Autocomplete */}
+          <div ref={mobileSearchRef} className="relative">
+            <form onSubmit={handleSearchSubmit} className="relative">
+              <input
+                type="text"
+                placeholder="Search hardware, mice, keyboards..."
+                value={inputVal}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onFocus={() => setIsDropdownOpen(inputVal.trim().length > 0)}
+                className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl py-2.5 pl-10 pr-8 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 font-mono"
+              />
+              <Search className="w-4 h-4 text-lime-400 absolute left-3.5 top-3" />
+              {inputVal && (
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('')}
+                  className="absolute right-3 top-3 text-zinc-500 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </form>
+
+            {/* Mobile Autocomplete Dropdown */}
+            {isDropdownOpen && inputVal.trim().length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-[#0a0c10] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 font-mono text-xs">
+                <div className="p-3 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-400 font-bold uppercase">
+                    Matching Hardware ({matchingProducts.length})
+                  </span>
+                  <span className="text-[10px] text-zinc-500">ESC to close</span>
+                </div>
+
+                {matchingProducts.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto divide-y divide-zinc-800/40">
+                    {matchingProducts.slice(0, 5).map((prod) => (
+                      <Link
+                        key={prod.id}
+                        href={`/product/${prod.id}`}
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          setMobileMenuOpen(false);
+                          if (onSearchChange) onSearchChange('');
+                          setInputVal('');
+                        }}
+                        className="p-3 flex items-center gap-3 hover:bg-lime-400/10 transition-colors"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                          {prod.image ? (
+                            <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
+                          ) : (
+                            <Package className="w-4 h-4 text-zinc-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white font-bold block truncate text-xs">
+                            {prod.name}
+                          </span>
+                          <span className="text-[9px] text-zinc-400 block">{prod.category}</span>
+                        </div>
+                        <span className="text-lime-400 font-bold text-xs shrink-0">
+                          {formatPrice(prod.priceLkr)}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-zinc-500 text-xs">
+                    No hardware matching "{inputVal}"
+                  </div>
+                )}
+
+                <button
+                  onClick={(e) => {
+                    handleSearchSubmit(e);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full p-3 bg-zinc-950 hover:bg-zinc-900 border-t border-zinc-800 text-lime-400 font-bold text-[11px] flex items-center justify-center gap-1.5"
+                >
+                  <span>View all results for "{inputVal}"</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Categories Section */}
@@ -369,11 +602,13 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 text-zinc-200 border border-zinc-800 text-xs font-bold w-full justify-center hover:text-lime-400 transition-colors"
             >
               <User className="w-4 h-4 text-lime-400" />
-              <span>{isAdminLoggedIn ? 'Admin Dashboard' : 'Sign In to Account'}</span>
+              <span>{isAdminLoggedIn ? "Admin Dashboard" : "Admin Sign In"}</span>
             </Link>
           </div>
+
         </div>
       )}
+
     </header>
   );
 }

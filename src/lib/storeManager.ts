@@ -1,4 +1,4 @@
-import { Product, OrderDetails, BankAccountDetails, HeroSlide, Category } from '@/types';
+import { Product, OrderDetails, BankAccountDetails, HeroSlide, Category, ShippingOption } from '@/types';
 import { CATEGORIES as DEFAULT_CATEGORIES } from './productsData';
 
 const PRODUCTS_STORAGE_KEY = 'zerolag_products_v2';
@@ -7,6 +7,7 @@ const BANK_STORAGE_KEY = 'zerolag_bank_details_v2';
 const SLIDES_STORAGE_KEY = 'zerolag_hero_slides_v1';
 const CATEGORIES_STORAGE_KEY = 'zerolag_categories_v1';
 const LOGO_STORAGE_KEY = 'zerolag_site_logo_url_v1';
+const SHIPPING_STORAGE_KEY = 'zerolag_shipping_rates_v1';
 
 export const DEFAULT_BANK_DETAILS: BankAccountDetails = {
   bankName: 'Commercial Bank of Ceylon',
@@ -80,11 +81,13 @@ export function getStoredProducts(): Product[] {
   }
 }
 
-export function saveProducts(products: Product[]): void {
+export function saveProducts(products: Product[], skipEvent = false): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
-    window.dispatchEvent(new Event('zerolag-products-updated'));
+    if (!skipEvent) {
+      window.dispatchEvent(new Event('zerolag-products-updated'));
+    }
   } catch (e) {
     console.error('Error saving products:', e);
   }
@@ -99,7 +102,7 @@ export async function syncProductsFromDatabase(): Promise<Product[]> {
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.products) && data.products.length > 0) {
-        saveProducts(data.products);
+        saveProducts(data.products, true);
         return data.products;
       }
     }
@@ -157,6 +160,18 @@ export function deleteStoredProduct(productId: string): Product[] {
   return updated;
 }
 
+export function clearAllStoredProducts(): Product[] {
+  saveProducts([]);
+
+  if (typeof window !== 'undefined') {
+    fetch('/api/products?all=true', {
+      method: 'DELETE'
+    }).catch(err => console.error('[Products API Purge Error]:', err));
+  }
+
+  return [];
+}
+
 // Order Store API
 export function getStoredOrders(): OrderDetails[] {
   if (typeof window === 'undefined') return INITIAL_ORDERS;
@@ -194,6 +209,13 @@ export function addStoredOrder(order: OrderDetails): OrderDetails[] {
 
   const updated = [newOrder, ...orders];
   saveOrders(updated);
+
+  fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newOrder)
+  }).catch(() => {});
+
   return updated;
 }
 
@@ -214,15 +236,24 @@ export function updateOrderStatus(orderId: string, status: OrderDetails['orderSt
 }
 
 // Bank Account Store API
+let activeBankPromise: Promise<BankAccountDetails> | null = null;
+
 export function getStoredBankDetails(): BankAccountDetails {
   if (typeof window === 'undefined') return DEFAULT_BANK_DETAILS;
   try {
     const raw = localStorage.getItem(BANK_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(DEFAULT_BANK_DETAILS));
       return DEFAULT_BANK_DETAILS;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      bankName: parsed.bankName ?? '',
+      accountName: parsed.accountName ?? '',
+      accountNumber: parsed.accountNumber ?? '',
+      branch: parsed.branch ?? '',
+      swiftCode: parsed.swiftCode ?? '',
+      instructions: parsed.instructions ?? ''
+    };
   } catch {
     return DEFAULT_BANK_DETAILS;
   }
@@ -230,13 +261,67 @@ export function getStoredBankDetails(): BankAccountDetails {
 
 export function saveBankDetails(details: BankAccountDetails): void {
   if (typeof window === 'undefined') return;
+  const payload: BankAccountDetails = {
+    bankName: details.bankName ?? '',
+    accountName: details.accountName ?? '',
+    accountNumber: details.accountNumber ?? '',
+    branch: details.branch ?? '',
+    swiftCode: details.swiftCode ?? '',
+    instructions: details.instructions ?? ''
+  };
+
   try {
-    localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(details));
+    localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(payload));
     window.dispatchEvent(new Event('zerolag-bank-updated'));
   } catch (e) {
-    console.error('Error saving bank details:', e);
+    console.error('Error saving bank details to localStorage:', e);
   }
+
+  fetch('/api/site-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'bank_details', value: JSON.stringify(payload) })
+  }).catch(() => {});
 }
+
+export async function syncBankDetailsFromDatabase(): Promise<BankAccountDetails> {
+  const localDetails = getStoredBankDetails();
+  if (typeof window === 'undefined') return localDetails;
+
+  if (activeBankPromise) return activeBankPromise;
+
+  activeBankPromise = (async () => {
+    try {
+      const res = await fetch('/api/site-settings?key=bank_details');
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.success && data.value) {
+          const parsed = JSON.parse(data.value);
+          const payload: BankAccountDetails = {
+            bankName: parsed.bankName ?? '',
+            accountName: parsed.accountName ?? '',
+            accountNumber: parsed.accountNumber ?? '',
+            branch: parsed.branch ?? '',
+            swiftCode: parsed.swiftCode ?? '',
+            instructions: parsed.instructions ?? ''
+          };
+          localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(payload));
+          window.dispatchEvent(new Event('zerolag-bank-updated'));
+          return payload;
+        }
+      }
+    } catch {
+      // Silently catch fetch or JSON parse errors
+    } finally {
+      activeBankPromise = null;
+    }
+    return localDetails;
+  })();
+
+  return activeBankPromise;
+}
+
+export const syncBankDetailsFromSupabase = syncBankDetailsFromDatabase;
 
 // Hero Slides Store API
 export function formatSlideImageUrl(url?: string): string {
@@ -506,3 +591,357 @@ export async function syncSiteLogoFromDatabase(): Promise<string> {
 }
 
 export const syncSiteLogoFromSupabase = syncSiteLogoFromDatabase;
+
+/**
+ * RFC-4180 compliant multi-line CSV parser.
+ * Correctly handles embedded newlines (\n, \r\n), commas, and double quotes ("") inside quoted fields.
+ */
+export function parseCSV(text: string): Record<string, string>[] {
+  if (!text || typeof text !== 'string') return [];
+
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentCell += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentCell.trim());
+      currentCell = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++; // skip \n after \r
+      }
+      currentRow.push(currentCell.trim());
+      if (currentRow.some(cell => cell.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = '';
+    } else {
+      currentCell += char;
+    }
+  }
+
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    if (currentRow.some(cell => cell.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  if (rows.length === 0) return [];
+
+  const rawHeaders = rows[0];
+  const headers = rawHeaders.map(h =>
+    h.replace(/^\uFEFF/, '').replace(/^["']+|["']+$|^=/g, '').trim()
+  );
+
+  const results: Record<string, string>[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const rowValues = rows[i];
+    if (!rowValues || rowValues.length === 0) continue;
+
+    const rowObj: Record<string, string> = {};
+    headers.forEach((header, idx) => {
+      if (header) {
+        rowObj[header] = rowValues[idx] || '';
+      }
+    });
+    results.push(rowObj);
+  }
+
+  return results;
+}
+
+/**
+ * Robustly parse price numbers from sheet/JSON rows or strings.
+ * Removes commas, currency symbols, and extra spaces before converting to float.
+ */
+export function parseCleanPrice(val: any): number {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const str = val.toString().replace(/,/g, '').replace(/[^\d.]/g, '');
+  const parsed = parseFloat(str || '0');
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Flexibly extract and normalize direct image URLs from sheet rows.
+ * Handles objects ({ url, src, link }), Google Drive links, formulas (=IMAGE("url")), and raw web URLs via bulletproof regex.
+ */
+export function normalizeImageUrl(rawUrl?: any): string {
+  if (!rawUrl) return '';
+
+  let str = '';
+  if (typeof rawUrl === 'object') {
+    str = rawUrl.url || rawUrl.src || rawUrl.link || rawUrl.href || rawUrl.image || '';
+  } else {
+    str = String(rawUrl);
+  }
+
+  str = str.trim();
+  if (!str) return '';
+
+  // 1. Direct Regex match for any web URL (handles =IMAGE("url"), =IMAGE("""url"""), or raw links)
+  const urlMatch = str.match(/https?:\/\/[^\s"'<>\)]+/i);
+  if (urlMatch && urlMatch[0]) {
+    let extracted = urlMatch[0].trim();
+
+    // Handle Google Drive links
+    if (extracted.includes('drive.google.com')) {
+      const idMatch = extracted.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || extracted.match(/\/d\/([a-zA-Z0-9_-]+)/) || extracted.match(/id=([a-zA-Z0-9_-]+)/);
+      if (idMatch && idMatch[1]) {
+        return `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+      }
+    }
+    return extracted;
+  }
+
+  if (str.startsWith('/') || str.startsWith('data:image/')) {
+    return str;
+  }
+
+  return '';
+}
+
+/**
+ * Helper to extract main image and gallery images from sheet columns flexibly.
+ * Gives top priority to Thumbnail, ThumbnailLink, Image1, etc.
+ */
+export function extractSheetProductImages(row: Record<string, any>): { image: string; galleryImages: string[]; images: string[] } {
+  const fallback = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
+
+  const findVal = (possibleKeys: string[]): any => {
+    const keys = Object.keys(row);
+    for (const pKey of possibleKeys) {
+      const match = keys.find(k => {
+        const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanPKey = pKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return cleanK === cleanPKey;
+      });
+      if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== '') {
+        return row[match];
+      }
+    }
+    return null;
+  };
+
+  // Look specifically for Thumbnail, ThumbnailLink, Image1, image columns with top priority
+  const rawThumbnail =
+    row['thumbnail'] ||
+    row['Thumbnail'] ||
+    row['thumbnaillink'] ||
+    row['ThumbnailLink'] ||
+    row['image1'] ||
+    row['Image1'] ||
+    row['image'] ||
+    row['Image'] ||
+    findVal(['thumbnail', 'thumbnaillink', 'image1', 'image 1', 'image', 'photo', 'picture', 'img', 'download link', 'download_link', 'link', 'image_url', 'image url']);
+
+  const extractedMainImage = normalizeImageUrl(rawThumbnail);
+
+  const galleryKeys = [
+    'image2', 'image 2', 'image3', 'image 3', 'image4', 'image 4',
+    'images', 'gallery_images', 'galleryimages', 'gallery images', 'gallery'
+  ];
+
+  const extractedUrls: string[] = [];
+  if (extractedMainImage) {
+    extractedUrls.push(extractedMainImage);
+  }
+
+  for (const key of galleryKeys) {
+    const val = findVal([key]);
+    if (val) {
+      if (Array.isArray(val)) {
+        val.forEach(item => {
+          const norm = normalizeImageUrl(item);
+          if (norm) extractedUrls.push(norm);
+        });
+      } else if (typeof val === 'string') {
+        const parts = val.split(/[\n,;|]+/).map(s => s.trim()).filter(Boolean);
+        parts.forEach(p => {
+          const norm = normalizeImageUrl(p);
+          if (norm) extractedUrls.push(norm);
+        });
+      } else if (typeof val === 'object') {
+        const norm = normalizeImageUrl(val);
+        if (norm) extractedUrls.push(norm);
+      }
+    }
+  }
+
+  const uniqueUrls = Array.from(new Set(extractedUrls.filter(Boolean)));
+
+  const mainImage = extractedMainImage || (uniqueUrls.length > 0 ? uniqueUrls[0] : fallback);
+  const galleryImages = uniqueUrls.filter(url => url !== mainImage);
+  const allImages = Array.from(new Set([mainImage, ...galleryImages]));
+
+  return {
+    image: mainImage,
+    galleryImages,
+    images: allImages
+  };
+}
+
+/**
+ * Parses a sheet/JSON row into a standardized Product object.
+ * Returns null for empty or garbage rows where product name is missing or less than 2 chars.
+ */
+export function parseSheetProductRow(row: Record<string, any>, idx: number = 0) {
+  const findStr = (possibleKeys: string[], defaultVal: string = ''): string => {
+    const keys = Object.keys(row);
+    for (const pKey of possibleKeys) {
+      const match = keys.find(k => {
+        const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanPKey = pKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return cleanK === cleanPKey;
+      });
+      if (match && row[match] !== undefined && row[match] !== null) {
+        const str = String(row[match]).trim();
+        if (str) return str;
+      }
+    }
+    return defaultVal;
+  };
+
+  const title = findStr(['name', 'product name', 'product_name', 'title', 'item name', 'item'], '');
+
+  // Skip empty or garbage rows where product name is empty or less than 2 characters
+  if (!title || title.trim().length < 2) {
+    return null;
+  }
+
+  const category = findStr(['category', 'cat', 'product category', 'type'], 'all');
+  const brand = findStr(['brand', 'manufacturer', 'make'], 'ZeroLag');
+
+  const priceVal = findStr(['price', 'selling_price', 'price (lkr)', 'selling price', 'unit price', 'cost', 'lkr price']);
+  const cleanPrice = parseCleanPrice(priceVal || row.price);
+
+  const origPriceVal = findStr(['original_price', 'originalprice', 'original price', 'regular price', 'regular_price', 'mrp', 'old price', 'before discount price']);
+  const cleanOrigPrice = parseCleanPrice(origPriceVal || row.original_price || row.originalPrice);
+  const origPriceNum = (cleanOrigPrice > cleanPrice) ? cleanOrigPrice : 0;
+
+  const stockVal = findStr(['stock', 'quantity', 'qty', 'stock count', 'stock_count']);
+  const stockNum = stockVal ? parseInt(stockVal.replace(/[^\d]/g, ''), 10) || 0 : 10;
+
+  const desc = findStr(['description', 'desc', 'details', 'product description']);
+  const availRaw = findStr(['availability', 'in_stock', 'status', 'stock_status']).toLowerCase();
+  const inStock = availRaw ? (availRaw.includes('show') || availRaw.includes('in stock') || availRaw.includes('available') || availRaw.includes('true') || stockNum > 0) : stockNum > 0;
+  const warranty = findStr(['warranty', 'warranty_period', 'warranty term'], '1 Year Official Warranty');
+
+  const { image, galleryImages, images } = extractSheetProductImages(row);
+
+  const id = findStr(['id', 'product_id', 'item_id']) || `prod-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`;
+
+  return {
+    id,
+    name: title,
+    brand,
+    category,
+    price: cleanPrice,
+    priceLkr: cleanPrice,
+    original_price: origPriceNum,
+    originalPrice: origPriceNum,
+    originalPriceLkr: origPriceNum > 0 ? origPriceNum : undefined,
+    image,
+    images,
+    galleryImages,
+    description: desc,
+    features: [brand, category],
+    specs: {} as Record<string, string>,
+    in_stock: inStock,
+    stock: stockNum,
+    warranty,
+    created_at: new Date().toISOString()
+  };
+}
+
+export const DEFAULT_SHIPPING_RATES: ShippingOption[] = [
+  {
+    id: 'trans-express',
+    name: 'Trans Express',
+    description: 'Fast Islandwide Courier (1-2 Days)',
+    rate: 475,
+    enabled: true,
+  },
+  {
+    id: 'citypak',
+    name: 'CityPak',
+    description: 'Standard Express Courier (2-3 Days)',
+    rate: 400,
+    enabled: true,
+  },
+  {
+    id: 'post-office',
+    name: 'Post Office / Speed Post',
+    description: 'Register Post / Speed Post (3-5 Days)',
+    rate: 390,
+    enabled: true,
+  },
+];
+
+export function getStoredShippingRates(): ShippingOption[] {
+  if (typeof window === 'undefined') return DEFAULT_SHIPPING_RATES;
+  try {
+    const data = localStorage.getItem(SHIPPING_STORAGE_KEY);
+    if (!data) return DEFAULT_SHIPPING_RATES;
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_SHIPPING_RATES;
+  } catch (e) {
+    console.error('Error loading shipping rates:', e);
+    return DEFAULT_SHIPPING_RATES;
+  }
+}
+
+export function saveShippingRates(rates: ShippingOption[], skipEvent = false): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SHIPPING_STORAGE_KEY, JSON.stringify(rates));
+    if (!skipEvent) {
+      window.dispatchEvent(new Event('zerolag-shipping-updated'));
+    }
+  } catch (e) {
+    console.error('Error saving shipping rates:', e);
+  }
+
+  fetch('/api/site-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'shipping_rates', value: JSON.stringify(rates) }),
+  }).catch(() => {});
+}
+
+export async function syncShippingRatesFromDatabase(): Promise<ShippingOption[]> {
+  const cached = getStoredShippingRates();
+  if (typeof window === 'undefined') return cached;
+
+  try {
+    const res = await fetch('/api/site-settings?key=shipping_rates');
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.success && data.value) {
+        const parsed = JSON.parse(data.value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          saveShippingRates(parsed, true);
+          return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Shipping Rates API Sync Warning]:', err);
+  }
+  return cached;
+}

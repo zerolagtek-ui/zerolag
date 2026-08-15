@@ -15,7 +15,11 @@ export async function GET() {
 
     const rawDocs = await ProductModel.find({}).sort({ created_at: -1 }).lean();
     const formatted = rawDocs.map((item: any) => {
-      const priceLkr = Number(item.price) || 0;
+      const priceLkr = Number(item.price || item.priceLkr) || 0;
+      const rawOrig = item.originalPrice !== undefined ? item.originalPrice : (item.original_price !== undefined ? item.original_price : item.originalPriceLkr);
+      const origNum = Number(rawOrig);
+      const originalPriceLkr = (!isNaN(origNum) && origNum > priceLkr) ? origNum : undefined;
+
       return {
         id: String(item.id || item._id),
         name: (item.name || item.title || 'Untitled Hardware') as string,
@@ -23,7 +27,7 @@ export async function GET() {
         category: (item.category || 'all') as string,
         priceLkr,
         priceUsd: Number(item.price_usd) || Math.round(priceLkr / 300),
-        originalPriceLkr: Number(item.originalPrice || item.original_price) || priceLkr,
+        originalPriceLkr,
         rating: Number(item.rating) || 5.0,
         reviewsCount: Number(item.reviews_count || item.reviewsCount) || 0,
         image: (item.image_url || item.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600') as string,
@@ -61,13 +65,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const productId = String(body.id || `prod-${Date.now()}`);
 
+    const priceNum = Number(body.priceLkr || body.price) || 0;
+    const rawOrig = body.originalPriceLkr !== undefined ? body.originalPriceLkr : (body.originalPrice !== undefined ? body.originalPrice : body.original_price);
+    const origNum = Number(rawOrig);
+    const originalPriceVal = (!isNaN(origNum) && origNum > priceNum) ? origNum : 0;
+
     const payload = {
       id: productId,
       name: body.name || body.title || 'Untitled Hardware',
       brand: body.brand || 'ZeroLag',
       category: body.category || 'all',
-      price: Number(body.priceLkr || body.price) || 0,
-      originalPrice: Number(body.originalPriceLkr || body.original_price) || Number(body.priceLkr || body.price) || 0,
+      price: priceNum,
+      originalPrice: originalPriceVal,
+      original_price: originalPriceVal,
       image: body.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600',
       gallery_images: body.galleryImages || [],
       specs: body.specs || {},
@@ -96,21 +106,28 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const url = new URL(request.url);
+    const purgeAll = url.searchParams.get('all') === 'true';
+    const id = url.searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Product ID required' }, { status: 400 });
+    if (!purgeAll && !id) {
+      return NextResponse.json({ success: false, error: 'Product ID or all=true required' }, { status: 400 });
     }
 
     if (isMongoConfigured()) {
       await connectToDatabase();
-      await ProductModel.deleteOne({ id });
+      if (purgeAll) {
+        await ProductModel.deleteMany({});
+        return NextResponse.json({ success: true, message: 'All products purged' });
+      } else if (id) {
+        await ProductModel.deleteOne({ id });
+        return NextResponse.json({ success: true, deletedId: id });
+      }
     }
 
-    return NextResponse.json({ success: true, deletedId: id });
+    return NextResponse.json({ success: true, message: 'Operation completed' });
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Failed to delete product';
+    const msg = error instanceof Error ? error.message : 'Failed to delete product(s)';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

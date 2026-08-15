@@ -96,11 +96,12 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
     if (selectedCategory !== 'all' && !isCategoryMatch(product.category, selectedCategory)) return false;
     if (inStockOnly && !product.inStock) return false;
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const nameMatch = product.name.toLowerCase().includes(q);
-      const brandMatch = product.brand.toLowerCase().includes(q);
-      const categoryMatch = product.category.toLowerCase().includes(q);
-      return nameMatch || brandMatch || categoryMatch;
+      const q = searchQuery.toLowerCase().trim();
+      const nameMatch = (product.name || '').toLowerCase().includes(q);
+      const brandMatch = (product.brand || '').toLowerCase().includes(q);
+      const categoryMatch = (product.category || '').toLowerCase().includes(q);
+      const descMatch = (product.description || '').toLowerCase().includes(q);
+      return nameMatch || brandMatch || categoryMatch || descMatch;
     }
     return true;
   }).sort((a, b) => {
@@ -143,7 +144,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
   const activeNormCategory = normalizeCategory(selectedCategory);
 
   return (
-    <section id="catalog" className="py-12 bg-black text-white transition-colors">
+    <section id="products" className="py-12 bg-black text-white transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
         {/* Section Header */}
@@ -259,6 +260,21 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
                   The store catalog is currently empty. Check back soon for new inventory!
                 </p>
               </>
+            ) : searchQuery.trim() ? (
+              <>
+                <Cpu className="w-12 h-12 text-zinc-600 mx-auto" />
+                <h3 className="text-lg font-bold text-white">No products found for "{searchQuery}"</h3>
+                <p className="text-xs text-zinc-400 font-mono">We couldn't find any hardware matching your search query.</p>
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-lime-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 hover:scale-105 transition-transform"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Clear Search</span>
+                </button>
+              </>
             ) : (
               <>
                 <Cpu className="w-12 h-12 text-zinc-600 mx-auto" />
@@ -270,7 +286,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
                     setSearchQuery('');
                     setInStockOnly(false);
                   }}
-                  className="px-4 py-2 rounded-xl bg-lime-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-lime-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 hover:scale-105 transition-transform"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Reset All Filters</span>

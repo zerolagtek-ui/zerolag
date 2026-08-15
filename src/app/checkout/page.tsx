@@ -1,16 +1,55 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/lib/productsData';
-import { addStoredOrder } from '@/lib/storeManager';
-import { PaymentMethod } from '@/types';
-import { ShieldCheck, Truck, Lock, ArrowLeft, CheckCircle2, ShoppingBag } from 'lucide-react';
+import { addStoredOrder, getStoredShippingRates, syncShippingRatesFromDatabase } from '@/lib/storeManager';
+import { preparePayHereForm, loadPayHereSDK } from '@/lib/payhere';
+import { PaymentMethod, ShippingOption } from '@/types';
+import { ShieldCheck, Truck, Lock, ArrowLeft, CheckCircle2, ShoppingBag, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function CheckoutPage() {
   const { cart, totalPriceLkr, discountAmountLkr, clearCart } = useCart();
+
+  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
+  const [selectedShippingId, setSelectedShippingId] = useState<string>('trans-express');
+  const [paymentError, setPaymentError] = useState('');
+
+  useEffect(() => {
+    async function loadShippingRates() {
+      const cached = getStoredShippingRates();
+      const activeCached = cached.filter(s => s.enabled);
+      setShippingOptions(activeCached.length > 0 ? activeCached : cached);
+      if (activeCached.length > 0) {
+        setSelectedShippingId(activeCached[0].id);
+      }
+
+      const synced = await syncShippingRatesFromDatabase();
+      const activeSynced = synced.filter(s => s.enabled);
+      if (activeSynced.length > 0) {
+        setShippingOptions(activeSynced);
+        if (!activeSynced.some(s => s.id === selectedShippingId)) {
+          setSelectedShippingId(activeSynced[0].id);
+        }
+      }
+    }
+    loadShippingRates();
+    loadPayHereSDK().catch(() => {});
+  }, []);
+
+  const activeShipping = shippingOptions.find(s => s.id === selectedShippingId) || shippingOptions[0] || {
+    id: 'trans-express',
+    name: 'Trans Express',
+    description: 'Fast Islandwide Courier (1-2 Days)',
+    rate: 475,
+    enabled: true
+  };
+
+  const shippingFee = Number(activeShipping.rate || 0);
+  const subtotal = totalPriceLkr + discountAmountLkr;
+  const totalAmount = totalPriceLkr + shippingFee;
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -29,6 +68,7 @@ export default function CheckoutPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (paymentError) setPaymentError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,11 +76,9 @@ export default function CheckoutPage() {
     if (cart.length === 0) return;
 
     setIsSubmitting(true);
+    setPaymentError('');
     const generatedOrderId = `ZLAG-${Math.floor(100000 + Math.random() * 900000)}`;
     const fullName = `${formData.firstName} ${formData.lastName}`.trim() || 'Valued Customer';
-    const subtotal = totalPriceLkr + discountAmountLkr;
-    const shippingFee = 0;
-    const totalAmount = totalPriceLkr;
 
     const newOrderPayload = {
       id: generatedOrderId,
@@ -51,6 +89,8 @@ export default function CheckoutPage() {
       city: formData.city,
       postalCode: formData.postalCode,
       paymentMethod: formData.paymentMethod,
+      shippingMethod: activeShipping.name,
+      shippingFee: shippingFee,
       paymentStatus: formData.paymentMethod === 'cod' || formData.paymentMethod === 'bank-transfer' ? ('Pending' as const) : ('Paid' as const),
       orderStatus: 'Pending' as const,
       items: cart,
@@ -61,9 +101,6 @@ export default function CheckoutPage() {
       createdAt: new Date().toISOString(),
     };
 
-    addStoredOrder(newOrderPayload);
-
-    // Asynchronous background email dispatch (non-blocking)
     const emailPayload = {
       orderId: generatedOrderId,
       customerName: fullName,
@@ -71,6 +108,7 @@ export default function CheckoutPage() {
       customerPhone: formData.phone,
       shippingAddress: `${formData.address}, ${formData.city}, ${formData.postalCode}`,
       paymentMethod: formData.paymentMethod,
+      shippingMethod: activeShipping.name,
       items: cart.map(item => ({
         name: item.product.name,
         quantity: item.quantity,
@@ -82,6 +120,77 @@ export default function CheckoutPage() {
       totalAmount: totalAmount,
       orderDate: new Date().toISOString(),
     };
+
+    // PayHere Gateway Sandbox Integration
+    if (formData.paymentMethod === 'payhere') {
+      try {
+        await loadPayHereSDK();
+        const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+
+        const hashRes = await fetch('/api/payhere/hash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: generatedOrderId,
+            amount: totalAmount,
+            currency: 'LKR'
+          })
+        });
+
+        const hashData = await hashRes.json();
+        if (!hashRes.ok || !hashData.success) {
+          throw new Error(hashData.error || 'Failed to generate PayHere payment hash');
+        }
+
+        const payhereParams = preparePayHereForm(newOrderPayload, originUrl, hashData.hash);
+
+        const winAny = window as any;
+        if (winAny.payhere) {
+          winAny.payhere.onCompleted = function onCompleted(orderId: string) {
+            const completedPayload = {
+              ...newOrderPayload,
+              paymentStatus: 'Paid' as const,
+              paymentMethod: 'payhere' as const
+            };
+            addStoredOrder(completedPayload);
+            fetch('/api/send-order-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(emailPayload)
+            }).catch(() => {});
+
+            setConfirmedOrderId(orderId || generatedOrderId);
+            setOrderConfirmed(true);
+            setIsSubmitting(false);
+            confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+            clearCart();
+          };
+
+          winAny.payhere.onDismissed = function onDismissed() {
+            setIsSubmitting(false);
+            setPaymentError('PayHere payment window was closed before completion. Please try again or select another payment option.');
+          };
+
+          winAny.payhere.onError = function onError(error: string) {
+            console.error('PayHere Gateway Error:', error);
+            setIsSubmitting(false);
+            setPaymentError(`PayHere Payment Error: ${error || 'Transaction failed'}. Please try again.`);
+          };
+
+          winAny.payhere.startPayment(payhereParams);
+          return;
+        } else {
+          throw new Error('PayHere SDK is not loaded properly.');
+        }
+      } catch (err: any) {
+        console.error('PayHere init failed:', err);
+        setIsSubmitting(false);
+        setPaymentError(err.message || 'Failed to initialize PayHere Checkout.');
+        return;
+      }
+    }
+
+    addStoredOrder(newOrderPayload);
 
     fetch('/api/send-order-email', {
       method: 'POST',
@@ -104,7 +213,7 @@ export default function CheckoutPage() {
 
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
   const whatsappSlipUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-    `Hello ZeroLag Tek! Here is my payment receipt for Order #${confirmedOrderId}`
+    `Hello ZeroLag Tek! Here is my payment receipt for Order #${confirmedOrderId} (${activeShipping.name} - ${formatPrice(shippingFee)})`
   )}`;
 
   if (orderConfirmed) {
@@ -145,8 +254,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white py-6 sm:py-12 px-3 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+    <div className="min-h-screen bg-black text-white py-8 sm:py-12 px-4">
+      <div className="max-w-5xl mx-auto space-y-8">
         
         {/* Header Navigation */}
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 text-xs font-mono">
@@ -281,9 +390,45 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
+                {/* Delivery Method Selector */}
+                <div className="pt-4 border-t border-zinc-800">
+                  <h2 className="text-sm font-mono font-bold text-lime-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+                    <span>3. Select Delivery Method</span>
+                    <Truck className="w-4 h-4 text-lime-400" />
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                    {shippingOptions.filter(s => s.enabled).map((option) => (
+                      <label
+                        key={option.id}
+                        className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                          selectedShippingId === option.id
+                            ? 'border-lime-400 bg-lime-500/10 text-lime-400 shadow-md shadow-lime-400/10'
+                            : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="shippingMethod"
+                          value={option.id}
+                          checked={selectedShippingId === option.id}
+                          onChange={() => setSelectedShippingId(option.id)}
+                          className="hidden"
+                        />
+                        <div>
+                          <span className="font-bold block text-white text-xs mb-0.5">{option.name}</span>
+                          <span className="text-[10px] text-zinc-400 block leading-tight">{option.description}</span>
+                        </div>
+                        <span className="mt-3 font-extrabold text-lime-400 text-xs block">
+                          + {formatPrice(option.rate)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-zinc-800">
                   <h2 className="text-sm font-mono font-bold text-lime-400 uppercase tracking-wider mb-4">
-                    3. Payment Method
+                    4. Payment Method
                   </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
                     <label className={`p-4 rounded-xl border cursor-pointer transition-colors ${formData.paymentMethod === 'bank-transfer' ? 'border-lime-400 bg-lime-500/10 text-lime-400' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}>
@@ -363,7 +508,7 @@ export default function CheckoutPage() {
                 <div className="pt-3 border-t border-zinc-800 space-y-2 text-zinc-400">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
-                    <span className="text-white">{formatPrice(totalPriceLkr + discountAmountLkr)}</span>
+                    <span className="text-white">{formatPrice(subtotal)}</span>
                   </div>
                   {discountAmountLkr > 0 && (
                     <div className="flex justify-between text-emerald-400">
@@ -372,19 +517,26 @@ export default function CheckoutPage() {
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span>Shipping</span>
-                    <span className="text-emerald-400 font-bold">FREE</span>
+                    <span>Shipping Fee ({activeShipping.name})</span>
+                    <span className="text-lime-400 font-bold">{formatPrice(shippingFee)}</span>
                   </div>
                   <div className="flex justify-between text-sm text-white font-extrabold pt-2 border-t border-zinc-800">
                     <span>Total Amount</span>
-                    <span className="text-lime-400">{formatPrice(totalPriceLkr)}</span>
+                    <span className="text-lime-400">{formatPrice(totalAmount)}</span>
                   </div>
                 </div>
+
+                {paymentError && (
+                  <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 text-xs font-mono flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{paymentError}</span>
+                  </div>
+                )}
 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-black font-extrabold text-sm shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform disabled:opacity-60 mt-4"
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-black font-extrabold text-sm shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform disabled:opacity-60 mt-4 cursor-pointer"
                 >
                   {isSubmitting ? 'Processing Order...' : 'PLACE ORDER NOW'}
                 </button>

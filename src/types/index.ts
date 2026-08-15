@@ -8,6 +8,9 @@ export interface Product {
   priceLkr: number;
   priceUsd: number;
   originalPriceLkr?: number;
+  price?: number;
+  originalPrice?: number;
+  original_price?: number;
   rating: number;
   reviewsCount: number;
   image: string;
@@ -72,6 +75,14 @@ export interface BankAccountDetails {
   instructions?: string;
 }
 
+export interface ShippingOption {
+  id: string;
+  name: string;
+  description: string;
+  rate: number;
+  enabled: boolean;
+}
+
 export interface OrderDetails {
   id?: string;
   customerName: string;
@@ -81,6 +92,8 @@ export interface OrderDetails {
   city: string;
   postalCode: string;
   paymentMethod: PaymentMethod;
+  shippingMethod?: string;
+  shippingFee?: number;
   paymentStatus?: PaymentStatus;
   orderStatus?: OrderStatus;
   items: CartItem[];

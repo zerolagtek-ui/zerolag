@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Product, OrderDetails, OrderStatus, BankAccountDetails, HeroSlide, Category } from '@/types';
+import { Product, OrderDetails, OrderStatus, BankAccountDetails, HeroSlide, Category, ShippingOption } from '@/types';
 import { formatPrice, getProductSlug } from '@/lib/productsData';
 import {
   getStoredProducts,
@@ -18,6 +18,7 @@ import {
   updateOrderStatus,
   getStoredBankDetails,
   saveBankDetails,
+  syncBankDetailsFromDatabase,
   getHeroSlides,
   syncHeroSlidesFromSupabase,
   addHeroSlide,
@@ -30,7 +31,16 @@ import {
   getStoredSiteLogo,
   saveSiteLogo,
   syncSiteLogoFromSupabase,
-  cleanLogoUrl
+  cleanLogoUrl,
+  parseCleanPrice,
+  normalizeImageUrl,
+  extractSheetProductImages,
+  parseSheetProductRow,
+  clearAllStoredProducts,
+  parseCSV,
+  getStoredShippingRates,
+  saveShippingRates,
+  syncShippingRatesFromDatabase
 } from '@/lib/storeManager';
 import {
   Lock,
@@ -62,7 +72,11 @@ import {
   Eye,
   EyeOff,
   Tag,
-  Star
+  Star,
+  FileSpreadsheet,
+  Truck,
+  Menu,
+  ChevronRight
 } from 'lucide-react';
 
 
@@ -78,89 +92,15 @@ interface AdminReview {
   created_at: string;
 }
 
-// CSV Parser Helper
-function parseCSV(text: string): Record<string, string>[] {
-  const lines: string[] = [];
-  let currentLine = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        currentLine += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if ((char === '\r' || char === '\n') && !inQuotes) {
-      if (char === '\r' && nextChar === '\n') {
-        i++;
-      }
-      if (currentLine.trim()) {
-        lines.push(currentLine);
-      }
-      currentLine = '';
-    } else {
-      currentLine += char;
-    }
-  }
-  if (currentLine.trim()) {
-    lines.push(currentLine);
-  }
-
-  if (lines.length === 0) return [];
-
-  const parseRow = (rowStr: string): string[] => {
-    const cells: string[] = [];
-    let cell = '';
-    let inside = false;
-
-    for (let i = 0; i < rowStr.length; i++) {
-      const c = rowStr[i];
-      const nc = rowStr[i + 1];
-
-      if (c === '"') {
-        if (inside && nc === '"') {
-          cell += '"';
-          i++;
-        } else {
-          inside = !inside;
-        }
-      } else if (c === ',' && !inside) {
-        cells.push(cell.trim());
-        cell = '';
-      } else {
-        cell += c;
-      }
-    }
-    cells.push(cell.trim());
-    return cells;
-  };
-
-  const headers = parseRow(lines[0]).map(h => h.trim());
-  const results: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const rowValues = parseRow(lines[i]);
-    if (rowValues.length === 0 || (rowValues.length === 1 && !rowValues[0])) continue;
-
-    const rowObj: Record<string, string> = {};
-    headers.forEach((header, idx) => {
-      rowObj[header] = rowValues[idx] || '';
-    });
-    results.push(rowObj);
-  }
-
-  return results;
-}
-
+// Helper function to find a key in header map case-insensitively
 function findHeaderValue(row: Record<string, string>, possibleKeys: string[]): string {
   const keys = Object.keys(row);
   for (const pKey of possibleKeys) {
-    const match = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === pKey.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const match = keys.find(k => {
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanPKey = pKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return cleanK === cleanPKey;
+    });
     if (match && row[match]) {
       return row[match].trim();
     }
@@ -170,19 +110,7 @@ function findHeaderValue(row: Record<string, string>, possibleKeys: string[]): s
 
 function cleanImageUrl(rawUrl: string): string {
   const fallback = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
-  if (!rawUrl) return fallback;
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return fallback;
-
-  // Google Drive link conversion (view, open?id=, uc?id=)
-  if (trimmed.includes('drive.google.com')) {
-    const driveMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
-    if (driveMatch && driveMatch[1]) {
-      return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
-    }
-  }
-
-  return trimmed;
+  return normalizeImageUrl(rawUrl) || fallback;
 }
 
 export default function AdminPage() {
@@ -194,7 +122,8 @@ export default function AdminPage() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'reviews' | 'slides' | 'categories' | 'bank' | 'branding'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'slides' | 'categories' | 'reviews' | 'bank' | 'shipping' | 'branding'>('products');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
   const [slides, setSlides] = useState<HeroSlide[]>([]);
@@ -360,30 +289,54 @@ export default function AdminPage() {
     setSiteLogoInput(logo || tempLogo || '');
   };
 
+  const fetchBank = async () => {
+    const bank = await syncBankDetailsFromDatabase();
+    setBankConfig(bank);
+  };
+
+  const [shippingRates, setShippingRates] = useState<ShippingOption[]>(getStoredShippingRates());
+
+  const handleSaveShippingRates = () => {
+    saveShippingRates(shippingRates);
+    alert('Shipping configuration saved successfully!');
+  };
+
+  const fetchShippingRates = async () => {
+    const rates = await syncShippingRatesFromDatabase();
+    setShippingRates(rates);
+  };
+
   const refreshData = async () => {
     fetchProducts();
     await fetchSlides();
     await fetchLogo();
+    await fetchBank();
+    await fetchShippingRates();
+    setOrders(getStoredOrders());
+    setCategories(getDynamicCategories());
+    fetchReviews();
+  };
+
+  const handleLocalStateSync = () => {
+    setProducts(getStoredProducts());
     setOrders(getStoredOrders());
     setCategories(getDynamicCategories());
     setBankConfig(getStoredBankDetails());
-    fetchReviews();
+    setShippingRates(getStoredShippingRates());
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       refreshData();
-      window.addEventListener('zerolag-products-updated', refreshData);
-      window.addEventListener('zerolag-orders-updated', refreshData);
-      window.addEventListener('zerolag-slides-updated', refreshData);
-      window.addEventListener('zerolag-categories-updated', refreshData);
-      window.addEventListener('zerolag-bank-updated', refreshData);
+      window.addEventListener('zerolag-products-updated', handleLocalStateSync);
+      window.addEventListener('zerolag-orders-updated', handleLocalStateSync);
+      window.addEventListener('zerolag-categories-updated', handleLocalStateSync);
+      window.addEventListener('zerolag-bank-updated', handleLocalStateSync);
       return () => {
-        window.removeEventListener('zerolag-products-updated', refreshData);
-        window.removeEventListener('zerolag-orders-updated', refreshData);
-        window.removeEventListener('zerolag-slides-updated', refreshData);
-        window.removeEventListener('zerolag-categories-updated', refreshData);
-        window.removeEventListener('zerolag-bank-updated', refreshData);
+        window.removeEventListener('zerolag-products-updated', handleLocalStateSync);
+        window.removeEventListener('zerolag-orders-updated', handleLocalStateSync);
+        window.removeEventListener('zerolag-categories-updated', handleLocalStateSync);
+        window.removeEventListener('zerolag-bank-updated', handleLocalStateSync);
       };
     }
   }, [isAuthenticated]);
@@ -497,7 +450,7 @@ export default function AdminPage() {
       category: categories[0]?.id || 'gaming-mice',
       brand: 'Logitech G',
       priceLkr: 25000,
-      originalPriceLkr: 30000,
+      originalPriceLkr: 0,
       stockCount: 10,
       inStock: true,
       image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80',
@@ -519,12 +472,14 @@ export default function AdminPage() {
     const keys = Object.keys(product.specs || {});
     const vals = Object.values(product.specs || {});
     const gallery = product.galleryImages || [];
+    const rawOrig = Number(product.originalPriceLkr ?? (product as any).originalPrice ?? (product as any).original_price ?? 0);
+    const origPriceVal = (!isNaN(rawOrig) && rawOrig > product.priceLkr) ? rawOrig : 0;
     setProductForm({
       name: product.name,
       category: product.category,
       brand: product.brand,
       priceLkr: product.priceLkr,
-      originalPriceLkr: product.originalPriceLkr || product.priceLkr,
+      originalPriceLkr: origPriceVal,
       stockCount: product.stockCount,
       inStock: product.inStock,
       image: product.image,
@@ -563,6 +518,8 @@ export default function AdminPage() {
     const productId = editingProduct ? editingProduct.id : `prod-${Date.now()}`;
     const title = productForm.name || '';
     const price = Number(productForm.priceLkr) || 0;
+    const origPriceInput = Number(productForm.originalPriceLkr) || 0;
+    const originalPriceValue = (!isNaN(origPriceInput) && origPriceInput > price) ? origPriceInput : 0;
     const stock = Number(productForm.stockCount) || 0;
     const imageUrl = productForm.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
     const galleryImages = [productForm.image2, productForm.image3, productForm.image4]
@@ -577,7 +534,8 @@ export default function AdminPage() {
       brand: productForm.brand,
       category: productForm.category,
       price: price,
-      original_price: Number(productForm.originalPriceLkr) || price,
+      originalPrice: originalPriceValue,
+      original_price: originalPriceValue,
       image: imageUrl,
       images: [imageUrl, ...galleryImages],
       gallery_images: galleryImages,
@@ -592,8 +550,6 @@ export default function AdminPage() {
       created_at: new Date().toISOString()
     };
 
-
-
     if (editingProduct) {
       const updated: Product = {
         ...editingProduct,
@@ -602,7 +558,8 @@ export default function AdminPage() {
         brand: productForm.brand,
         priceLkr: price,
         priceUsd: priceUsd,
-        originalPriceLkr: productForm.originalPriceLkr,
+        originalPriceLkr: originalPriceValue > 0 ? originalPriceValue : undefined,
+        originalPrice: originalPriceValue > 0 ? originalPriceValue : undefined,
         stockCount: stock,
         inStock: stock > 0 && productForm.inStock,
         image: imageUrl,
@@ -622,7 +579,8 @@ export default function AdminPage() {
         brand: productForm.brand,
         priceLkr: price,
         priceUsd: priceUsd,
-        originalPriceLkr: productForm.originalPriceLkr,
+        originalPriceLkr: originalPriceValue > 0 ? originalPriceValue : undefined,
+        originalPrice: originalPriceValue > 0 ? originalPriceValue : undefined,
         rating: 5.0,
         reviewsCount: 1,
         image: imageUrl,
@@ -651,12 +609,28 @@ export default function AdminPage() {
     }
   };
 
+  const handleClearAllProducts = async () => {
+    if (!confirm('Are you sure you want to PURGE AND DELETE ALL PRODUCTS from inventory and database? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setProducts(clearAllStoredProducts());
+      await fetch('/api/products?all=true', { method: 'DELETE' });
+      await fetchProducts();
+      alert('All products purged successfully!');
+    } catch (err) {
+      console.error('Failed to purge products:', err);
+      alert('Failed to purge products.');
+    }
+  };
+
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.csv')) {
-      alert('Please select a valid CSV file exported from Google Sheets or Excel.');
+    if (!file.name.endsWith('.csv') && !file.name.endsWith('.json')) {
+      alert('Please select a valid CSV or JSON file exported from Google Sheets or Excel.');
       return;
     }
 
@@ -664,55 +638,35 @@ export default function AdminPage() {
 
     try {
       const text = await file.text();
-      const rows = parseCSV(text);
+      let rows: Record<string, any>[] = [];
+
+      if (file.name.endsWith('.json')) {
+        try {
+          const parsed = JSON.parse(text);
+          rows = Array.isArray(parsed) ? parsed : (parsed.products || [parsed]);
+        } catch (jsonErr) {
+          alert('Invalid JSON file format.');
+          setIsImportingCSV(false);
+          if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+          return;
+        }
+      } else {
+        rows = parseCSV(text);
+      }
 
       if (rows.length === 0) {
-        alert('The uploaded CSV file is empty or could not be parsed.');
+        alert('The uploaded file is empty or could not be parsed.');
         setIsImportingCSV(false);
         if (csvFileInputRef.current) csvFileInputRef.current.value = '';
         return;
       }
 
-      const batch: any[] = [];
-      rows.forEach((row, idx) => {
-        const title = findHeaderValue(row, ['name', 'title', 'product name', 'product_name', 'item name', 'item']);
-        if (!title) return;
-
-        const category = findHeaderValue(row, ['category', 'cat', 'product category', 'type']) || 'all';
-        const brand = findHeaderValue(row, ['brand', 'manufacturer', 'make']) || 'ZeroLag';
-        const priceRaw = findHeaderValue(row, ['price', 'price (lkr)', 'unit price', 'cost', 'lkr price']);
-        const priceNum = Number(priceRaw.replace(/[^0-9.]/g, '')) || 0;
-        const origPriceRaw = findHeaderValue(row, ['original_price', 'original price', 'regular price', 'mrp', 'old price']);
-        const origPriceNum = origPriceRaw ? Number(origPriceRaw.replace(/[^0-9.]/g, '')) : priceNum;
-        const stockRaw = findHeaderValue(row, ['stock', 'quantity', 'qty', 'stock count', 'stock_count']);
-        const stockNum = stockRaw ? Number(stockRaw.replace(/[^0-9]/g, '')) : 10;
-        const desc = findHeaderValue(row, ['description', 'desc', 'details', 'product description']);
-        const rawImage = findHeaderValue(row, ['thumbnail', 'image1', 'image 1', 'link', 'image_url', 'image url', 'image', 'photo', 'picture', 'image link', 'img']);
-        const imageUrl = cleanImageUrl(rawImage);
-        const availRaw = findHeaderValue(row, ['availability', 'in_stock', 'status', 'stock_status']).toLowerCase();
-        const inStock = availRaw ? (availRaw.includes('show') || availRaw.includes('in stock') || availRaw.includes('available') || availRaw.includes('true') || stockNum > 0) : stockNum > 0;
-        const warranty = findHeaderValue(row, ['warranty', 'warranty_period', 'warranty term']) || '1 Year Official Warranty';
-
-        const id = `prod-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`;
-        batch.push({
-          id,
-          name: title,
-          brand,
-          category,
-          price: priceNum,
-          original_price: origPriceNum,
-          image: imageUrl,
-          description: desc,
-          features: [brand, category],
-          specs: {},
-          in_stock: inStock,
-          warranty,
-          created_at: new Date().toISOString()
-        });
-      });
+      const batch = rows
+        .map((row, idx) => parseSheetProductRow(row, idx))
+        .filter((p): p is NonNullable<ReturnType<typeof parseSheetProductRow>> => p !== null && Boolean(p.name) && p.name.trim().length >= 2);
 
       if (batch.length === 0) {
-        alert('No valid product rows were found in the CSV file. Please ensure there is a "Name" or "Title" column header.');
+        alert('No valid product rows were found in the uploaded file. Please ensure there is a "Name" or "Title" column header.');
         setIsImportingCSV(false);
         if (csvFileInputRef.current) csvFileInputRef.current.value = '';
         return;
@@ -739,15 +693,17 @@ export default function AdminPage() {
         category: item.category,
         priceLkr: item.price,
         priceUsd: Math.round(item.price / 300),
-        originalPriceLkr: item.original_price,
-        rating: 0,
-        reviewsCount: 0,
+        originalPriceLkr: item.original_price > 0 ? item.original_price : undefined,
+        originalPrice: item.original_price > 0 ? item.original_price : undefined,
+        rating: 5.0,
+        reviewsCount: 1,
         image: item.image,
+        galleryImages: item.galleryImages,
         specs: item.specs || {},
         description: item.description,
         tags: item.features || [],
         inStock: item.in_stock,
-        stockCount: 10,
+        stockCount: item.stock || 10,
         featured: true,
         warranty: item.warranty
       }));
@@ -757,9 +713,9 @@ export default function AdminPage() {
 
       alert(`Successfully imported ${batch.length} products!`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown CSV parse error';
-      console.error('[CSV Import Error]:', err);
-      alert(`Error parsing CSV file: ${msg}`);
+      const msg = err instanceof Error ? err.message : 'Unknown sheet parse error';
+      console.error('[Sheet Import Error]:', err);
+      alert(`Error parsing sheet file: ${msg}`);
     } finally {
       setIsImportingCSV(false);
       if (csvFileInputRef.current) csvFileInputRef.current.value = '';
@@ -980,51 +936,264 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col transition-colors">
-      {/* Header */}
-      <header className="bg-zinc-950 border-b border-zinc-800 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
-          
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5">
+    <div className="min-h-screen bg-black text-white flex flex-col md:flex-row transition-colors font-mono">
+
+      {/* Mobile Top Header with Hamburger Toggle (Visible on < md) */}
+      <div className="md:hidden sticky top-0 z-40 bg-[#08090d] border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5">
+            <div className="w-full h-full bg-zinc-950 rounded-[8px] flex items-center justify-center">
+              <Shield className="w-4 h-4 text-lime-400" />
+            </div>
+          </div>
+          <span className="font-extrabold text-base text-white tracking-wider">ZeroLag TEK</span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          {pendingOrdersCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold">
+              {pendingOrdersCount} Pending
+            </span>
+          )}
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-xl bg-zinc-900 text-zinc-300 border border-zinc-800 hover:text-white"
+            aria-label="Toggle Navigation Drawer"
+          >
+            {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Slide-Over Backdrop Drawer Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Left Sidebar Navigation (Desktop Fixed/Sticky + Mobile Overlay Drawer) */}
+      <aside
+        className={`fixed md:sticky top-0 z-50 md:z-30 h-screen w-64 lg:w-72 bg-[#08090d] border-r border-zinc-800/80 flex flex-col justify-between p-5 transition-transform duration-300 ease-in-out shrink-0 overflow-y-auto ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+        {/* Top Branding Section */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lime-400 to-emerald-500 p-0.5 shadow-lg shadow-lime-400/20 group-hover:scale-105 transition-transform">
                 <div className="w-full h-full bg-zinc-950 rounded-[8px] flex items-center justify-center">
                   <Shield className="w-5 h-5 text-lime-400" />
                 </div>
               </div>
-              <span className="font-extrabold text-xl text-white tracking-wider">ZeroLag Tek</span>
-            </Link>
-            <span className="text-xs px-2.5 py-1 rounded-full bg-lime-400/20 text-lime-400 font-mono font-bold border border-lime-400/40 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse" />
-              <span>zerolagtek@gmail.com</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-mono flex items-center gap-1.5"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Storefront</span>
+              <div>
+                <span className="font-extrabold text-base text-white tracking-wider block">ZeroLag TEK</span>
+                <span className="text-[10px] text-zinc-500 block">ADMIN CONTROL</span>
+              </div>
             </Link>
 
             <button
-              onClick={handleLogout}
-              className="px-3.5 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 text-xs font-mono font-bold flex items-center gap-1.5"
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
+              <X className="w-5 h-5" />
             </button>
           </div>
 
+          <div className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800/80 flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse shrink-0" />
+            <span className="text-zinc-300 font-mono text-[11px] truncate">zerolagtek@gmail.com</span>
+          </div>
+
+          {/* Navigation Items List */}
+          <nav className="space-y-1 text-xs font-mono">
+            <button
+              onClick={() => { setActiveTab('products'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'products'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Package className="w-4 h-4 text-lime-400" />
+                <span>Products</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 group-hover:border-zinc-700">
+                {products.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('orders'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'orders'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ShoppingBag className="w-4 h-4 text-lime-400" />
+                <span>Orders</span>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${
+                pendingOrdersCount > 0
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                  : 'bg-zinc-900 text-zinc-300 border-zinc-800'
+              }`}>
+                {orders.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('slides'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'slides'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sliders className="w-4 h-4 text-lime-400" />
+                <span>Hero Slides</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300">
+                {slides.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('categories'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'categories'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Layers className="w-4 h-4 text-lime-400" />
+                <span>Categories</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300">
+                {categories.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('reviews'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'reviews'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span>Reviews</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300">
+                {reviews.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('bank'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'bank'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Building2 className="w-4 h-4 text-lime-400" />
+                <span>Bank Config</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('shipping'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'shipping'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Truck className="w-4 h-4 text-lime-400" />
+                <span>Shipping Config</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('branding'); setIsSidebarOpen(false); }}
+              className={`w-full px-3.5 py-3 rounded-xl font-bold transition-all flex items-center justify-between group ${
+                activeTab === 'branding'
+                  ? 'bg-gradient-to-r from-lime-400/20 to-emerald-500/20 text-lime-400 border-l-4 border-lime-400 shadow-lg shadow-lime-400/10'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ImageIcon className="w-4 h-4 text-lime-400" />
+                <span>Logo & Branding</span>
+              </div>
+            </button>
+          </nav>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Sidebar Footer Actions */}
+        <div className="pt-6 border-t border-zinc-800/80 space-y-2 text-xs font-mono">
+          <Link
+            href="/"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 flex items-center justify-center gap-2 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 text-lime-400" />
+            <span>View Storefront</span>
+          </Link>
 
-        {/* Dashboard Overview Cards */}
+          <button
+            onClick={handleLogout}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout Account</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-8 overflow-y-auto">
+
+        {/* Main Content Header Strip */}
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4 gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white uppercase tracking-wider">
+              {activeTab === 'products' && '📦 Hardware Products Catalog'}
+              {activeTab === 'orders' && '🛒 Store Orders & Fulfillment'}
+              {activeTab === 'slides' && '🖼️ Hero Banners & Slider Manager'}
+              {activeTab === 'categories' && '🗂️ Hardware Categories Manager'}
+              {activeTab === 'reviews' && '⭐ Customer Reviews & Moderation'}
+              {activeTab === 'bank' && '🏦 Bank Account Details Configuration'}
+              {activeTab === 'shipping' && '🚚 Courier Shipping Rates Configuration'}
+              {activeTab === 'branding' && '🎨 Store Logo & Visual Branding'}
+            </h1>
+            <p className="text-xs text-zinc-400 font-mono mt-0.5">
+              ZeroLag TEK Administration Dashboard
+            </p>
+          </div>
+
+          <button
+            onClick={refreshData}
+            className="px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 hover:text-white hover:border-lime-400 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            title="Refresh Store Data"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-lime-400" />
+            <span className="hidden sm:inline">Refresh Data</span>
+          </button>
+        </div>
+
+        {/* Dashboard Overview Metrics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-[#0a0c10] border border-zinc-800 text-white space-y-2 shadow-sm">
             <div className="flex items-center justify-between text-zinc-400 text-xs font-mono">
@@ -1071,103 +1240,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Tab Navigation Controls */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-zinc-800 pb-4 gap-4">
-          <div className="flex items-center gap-2 overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('products')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'products'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Products ({products.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'orders'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Orders ({orders.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('slides')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'slides'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <Sliders className="w-4 h-4" />
-              <span>Hero Slides ({slides.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('categories')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'categories'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              <span>Categories ({categories.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('reviews')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'reviews'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>Reviews ({reviews.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('bank')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'bank'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Bank Config</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('branding')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border whitespace-nowrap ${
-                activeTab === 'branding'
-                  ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 border-transparent shadow-lg shadow-lime-400/20'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <ImageIcon className="w-4 h-4" />
-              <span>Logo & Branding</span>
-            </button>
-          </div>
-
-          <button
-            onClick={refreshData}
-            className="self-end sm:self-auto px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-200 hover:border-lime-400 flex items-center gap-1.5"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-lime-400" />
-            <span>Sync Data</span>
-          </button>
-        </div>
-
         {/* TAB 1: PRODUCTS CATALOG */}
         {activeTab === 'products' && (
           <div className="space-y-6">
@@ -1200,7 +1272,7 @@ export default function AdminPage() {
                 <input
                   type="file"
                   ref={csvFileInputRef}
-                  accept=".csv"
+                  accept=".csv,.json"
                   onChange={handleCSVUpload}
                   className="hidden"
                 />
@@ -1215,7 +1287,16 @@ export default function AdminPage() {
                   ) : (
                     <Upload className="w-4 h-4 text-lime-400" />
                   )}
-                  <span>{isImportingCSV ? 'Importing...' : 'Import CSV'}</span>
+                  <span>{isImportingCSV ? 'Importing...' : 'Import Sheet / CSV'}</span>
+                </button>
+
+                <button
+                  onClick={handleClearAllProducts}
+                  className="px-4 py-2.5 rounded-xl bg-rose-950/60 border border-rose-800/80 hover:bg-rose-900 text-rose-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Wipe and clear all products from catalog database"
+                >
+                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <span>Clear All Products (Purge)</span>
                 </button>
 
                 <button
@@ -1648,11 +1729,10 @@ export default function AdminPage() {
 
             <form onSubmit={handleSaveBankConfig} className="space-y-4 font-mono text-xs">
               <div>
-                <label className="text-zinc-400 block mb-1">Bank Name *</label>
+                <label className="text-zinc-400 block mb-1">Bank Name</label>
                 <input
                   type="text"
-                  required
-                  value={bankConfig.bankName}
+                  value={bankConfig.bankName ?? ''}
                   onChange={(e) => setBankConfig({ ...bankConfig, bankName: e.target.value })}
                   placeholder="Commercial Bank of Ceylon"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
@@ -1660,11 +1740,10 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="text-zinc-400 block mb-1">Account Holder Name *</label>
+                <label className="text-zinc-400 block mb-1">Account Holder Name</label>
                 <input
                   type="text"
-                  required
-                  value={bankConfig.accountName}
+                  value={bankConfig.accountName ?? ''}
                   onChange={(e) => setBankConfig({ ...bankConfig, accountName: e.target.value })}
                   placeholder="ZeroLag Tek LK (Pvt) Ltd"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
@@ -1673,22 +1752,20 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-zinc-400 block mb-1">Account Number *</label>
+                  <label className="text-zinc-400 block mb-1">Account Number</label>
                   <input
                     type="text"
-                    required
-                    value={bankConfig.accountNumber}
+                    value={bankConfig.accountNumber ?? ''}
                     onChange={(e) => setBankConfig({ ...bankConfig, accountNumber: e.target.value })}
                     placeholder="8004592011"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-lime-400 focus:border-lime-400 focus:outline-none font-bold"
                   />
                 </div>
                 <div>
-                  <label className="text-zinc-400 block mb-1">Branch Name *</label>
+                  <label className="text-zinc-400 block mb-1">Branch Name</label>
                   <input
                     type="text"
-                    required
-                    value={bankConfig.branch}
+                    value={bankConfig.branch ?? ''}
                     onChange={(e) => setBankConfig({ ...bankConfig, branch: e.target.value })}
                     placeholder="Liberty Plaza Branch (Colombo 03)"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
@@ -1700,7 +1777,7 @@ export default function AdminPage() {
                 <label className="text-zinc-400 block mb-1">SWIFT Code (Optional)</label>
                 <input
                   type="text"
-                  value={bankConfig.swiftCode || ''}
+                  value={bankConfig.swiftCode ?? ''}
                   onChange={(e) => setBankConfig({ ...bankConfig, swiftCode: e.target.value })}
                   placeholder="CCBYLKLX"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
@@ -1711,7 +1788,7 @@ export default function AdminPage() {
                 <label className="text-zinc-400 block mb-1">WhatsApp Receipt Instructions</label>
                 <textarea
                   rows={3}
-                  value={bankConfig.instructions || ''}
+                  value={bankConfig.instructions ?? ''}
                   onChange={(e) => setBankConfig({ ...bankConfig, instructions: e.target.value })}
                   placeholder="Transfer order total and WhatsApp receipt to +94741117981..."
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
@@ -1733,6 +1810,93 @@ export default function AdminPage() {
                 <span>Save Bank Configuration</span>
               </button>
             </form>
+          </div>
+        )}
+
+        {/* TAB 7: SHIPPING CONFIGURATION */}
+        {activeTab === 'shipping' && (
+          <div className="max-w-3xl bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm font-mono text-xs">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-2 text-white font-bold text-lg">
+                <Truck className="w-5 h-5 text-lime-400" />
+                <h3>Shipping / Courier Configuration</h3>
+              </div>
+              <span className="text-[10px] px-2.5 py-1 rounded-full bg-lime-500/20 text-lime-400 border border-lime-400/40">
+                LIVE CHECKOUT COURIER RATES
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {shippingRates.map((rateOption, idx) => (
+                <div key={rateOption.id} className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm font-bold text-white cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={rateOption.enabled}
+                        onChange={(e) => {
+                          const updated = [...shippingRates];
+                          updated[idx] = { ...updated[idx], enabled: e.target.checked };
+                          setShippingRates(updated);
+                        }}
+                        className="rounded border-zinc-700 text-lime-400 focus:ring-lime-400"
+                      />
+                      <span>Enable {rateOption.name}</span>
+                    </label>
+                    <span className="text-[10px] text-zinc-500">ID: {rateOption.id}</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                      <label className="text-zinc-400 block text-[10px] mb-1">Courier Name</label>
+                      <input
+                        type="text"
+                        value={rateOption.name}
+                        onChange={(e) => {
+                          const updated = [...shippingRates];
+                          updated[idx] = { ...updated[idx], name: e.target.value };
+                          setShippingRates(updated);
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-zinc-400 block text-[10px] mb-1">Estimated Delivery Time / Description</label>
+                      <input
+                        type="text"
+                        value={rateOption.description}
+                        onChange={(e) => {
+                          const updated = [...shippingRates];
+                          updated[idx] = { ...updated[idx], description: e.target.value };
+                          setShippingRates(updated);
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-zinc-400 block text-[10px] mb-1">Courier Rate (Rs.)</label>
+                      <input
+                        type="number"
+                        value={rateOption.rate}
+                        onChange={(e) => {
+                          const updated = [...shippingRates];
+                          updated[idx] = { ...updated[idx], rate: Number(e.target.value) || 0 };
+                          setShippingRates(updated);
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-lime-400 font-bold focus:border-lime-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleSaveShippingRates}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-all cursor-pointer"
+            >
+              <span>Save Shipping Rates Configuration</span>
+            </button>
           </div>
         )}
 
@@ -1805,7 +1969,7 @@ export default function AdminPage() {
           </div>
         )}
 
-      </main>
+      </div>
 
       {/* MODAL 1: CREATE & EDIT PRODUCT */}
       {isProductModalOpen && (
@@ -1844,7 +2008,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <label className="text-zinc-400 block mb-1">Brand Name *</label>
                   <input
@@ -1856,12 +2020,22 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-zinc-400 block mb-1">Price (LKR) *</label>
+                  <label className="text-zinc-400 block mb-1">Selling Price (Rs.) *</label>
                   <input
                     type="number"
                     required
-                    value={productForm.priceLkr}
+                    value={productForm.priceLkr || ''}
                     onChange={(e) => setProductForm({ ...productForm, priceLkr: Number(e.target.value) })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-zinc-400 block mb-1">Original / Before Discount Price (Rs.) - (Optional)</label>
+                  <input
+                    type="number"
+                    value={productForm.originalPriceLkr || ''}
+                    onChange={(e) => setProductForm({ ...productForm, originalPriceLkr: e.target.value ? Number(e.target.value) : 0 })}
+                    placeholder="e.g. 35000"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-white focus:border-lime-400 focus:outline-none"
                   />
                 </div>

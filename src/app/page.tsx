@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { HeroBanner } from '@/components/HeroBanner';
 import { ProductGrid } from '@/components/ProductGrid';
@@ -12,11 +13,25 @@ import { getProductsFromSupabase } from '@/lib/productsData';
 import { syncHeroSlidesFromSupabase, getStoredProducts } from '@/lib/storeManager';
 import { Product } from '@/types';
 
-export default function Home() {
-  const [searchQuery, setSearchQuery] = useState('');
+function HomeContent() {
+  const searchParams = useSearchParams();
+  const initialSearchParam = searchParams.get('search') || '';
+
+  const [searchQuery, setSearchQuery] = useState(initialSearchParam);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    const q = searchParams.get('search');
+    if (q !== null) {
+      setSearchQuery(q);
+      setTimeout(() => {
+        const el = document.getElementById('products');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     async function loadData() {
@@ -68,5 +83,13 @@ export default function Home() {
       <PayHereCheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} />
       <AiAssistantDrawer />
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center font-mono text-xs">Loading ZeroLag Catalog...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }
