@@ -211,11 +211,11 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                 )}
                 <div className="flex justify-between text-zinc-400">
                   <span>Islandwide Delivery:</span>
-                  <span className="text-emerald-400 font-semibold">FREE</span>
+                  <span className="text-zinc-200 font-semibold">{formatPrice(400)}</span>
                 </div>
                 <div className="flex justify-between text-base font-extrabold text-white pt-2 border-t border-zinc-800">
-                  <span>Total:</span>
-                  <span className="text-lime-400 font-mono">{formatPrice(totalPriceLkr)}</span>
+                  <span>Estimated Total:</span>
+                  <span className="text-lime-400 font-mono">{formatPrice(totalPriceLkr + 400)}</span>
                 </div>
               </div>
 

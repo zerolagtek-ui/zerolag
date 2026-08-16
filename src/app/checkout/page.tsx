@@ -372,20 +372,29 @@ export default function CheckoutPage() {
             phone: formData.phone,
             email: formData.email,
             address: formData.address,
-            city: formData.city,
-            response_url: 'https://zerolagtek.app/api/payzy/verify'
+            city: formData.city
           })
         });
 
+        const isFallback = payzyRes.headers.get("X-Payzy-Fallback") === "form-submit" || (payzyRes.headers.get("Content-Type") || "").includes("text/html");
+        if (isFallback) {
+          const html = await payzyRes.text();
+          clearCart();
+          document.open();
+          document.write(html);
+          document.close();
+          return;
+        }
+
         const payzyData = await payzyRes.json();
         const targetUrl = payzyData.redirect_url || payzyData.url || payzyData?.data?.url || payzyData?.data?.redirect_url;
-        if (payzyRes.ok && payzyData.success && targetUrl) {
+        if (payzyRes.ok && payzyData.success !== false && targetUrl) {
           clearCart();
           window.location.href = targetUrl;
           return;
         } else {
-          const errMsg = payzyData.message || (payzyData.error?.message ? payzyData.error.message : (typeof payzyData.error === 'string' ? payzyData.error : 'Payzy payment initialization failed.'));
-          throw new Error(errMsg);
+          const errMsg = payzyData.message || payzyData.error || (payzyData.error?.message ? payzyData.error.message : 'Payzy payment initialization failed.');
+          throw new Error(typeof errMsg === 'string' ? errMsg : 'Payzy payment initialization failed.');
         }
       } catch (err: any) {
         console.error('Payzy execution error:', err);

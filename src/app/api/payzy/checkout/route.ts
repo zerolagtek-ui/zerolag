@@ -1,148 +1,155 @@
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import { PAYZY_HANDSHAKE_URL } from "@/lib/payzy";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('--- [PAYZY INCOMING BODY] ---', body);
 
-    const secretKey = String(process.env.PAYZY_SECRET_KEY || process.env.PAYZY_APP_SECRET || '').trim();
-    if (!secretKey) {
-      return NextResponse.json(
-        { success: false, error: 'MISSING_SECRET_KEY', message: 'PAYZY_SECRET_KEY is missing in environment variables.' },
-        { status: 500 }
-      );
-    }
+    // Direct final total (do not add freight again since body.amount / body.totalAmount already includes it)
+    const rawFreight = Number(body.freight ?? body.shippingFee ?? 0);
+    const finalAmount = Number(body.totalAmount ?? body.amount ?? 0);
 
-    const x_shopid = String(process.env.NEXT_PUBLIC_PAYZY_SHOP_ID || process.env.PAYZY_SHOP_ID || '2').trim();
-    const rawTestMode = (process.env.NEXT_PUBLIC_PAYZY_TEST_MODE || 'on').trim();
-    const x_test_mode = rawTestMode.toLowerCase() === 'off' ? 'off' : 'on';
-    const x_version = '1.0';
-    const x_platform = 'custom';
+    // 2. Ensure NO empty string fields are sent (use sensible fallback defaults if blank)
+    const firstName = String(body.first_name || 'Customer').trim() || 'Customer';
+    const lastName = String(body.last_name || '').trim() || 'Customer';
+    const company = String(body.company || '').trim() || 'N/A';
+    const address = String(body.address || '').trim() || 'Colombo';
+    const city = String(body.city || '').trim() || 'Colombo';
+    const state = String(body.state || '').trim() || 'Western';
+    const zip = String(body.zip || '').trim() || '00100';
+    const phone = String(body.phone || '').trim() || '0771234567';
+    const email = String(body.email || '').trim() || 'customer@example.com';
+    const country = String(body.country || '').trim() || 'Sri Lanka';
 
-    const rawAmount = body.amount ?? body.totalAmount ?? body.finalPayable ?? body.total ?? 0;
-    const rawFreight = body.freight ?? body.shippingFee ?? body.deliveryFee ?? 0;
+    const reqHost = req.headers.get('host') || 'localhost:3000';
+    const reqProtocol = req.headers.get('x-forwarded-proto') || 'http';
+    const dynamicOrigin = `${reqProtocol}://${reqHost}`;
+    const responseUrl = body.response_url || body.responseUrl || `${dynamicOrigin}/api/payzy/verify`;
 
-    const x_amount = String(Number(rawAmount) || 0);
-    const x_freight = String(Number(rawFreight) || 0);
-    const x_order_id = String(body.order_id || body.orderId || `ZLAG-${Date.now()}`).trim();
-    const x_response_url = 'https://zerolagtek.app/api/payzy/verify';
-
-    const x_first_name = String(body.first_name || 'Customer').trim();
-    const x_last_name = String(body.last_name || 'Valued').trim();
-    const x_company = String(body.company || 'ZeroLag Customer').trim();
-    const x_address = String(body.address || 'Colombo').trim();
-    const x_country = 'Sri Lanka';
-    const x_state = String(body.state || 'Western').trim();
-    const x_city = String(body.city || 'Colombo').trim();
-    const x_zip = String(body.zip || '00100').trim();
-    const x_phone = String(body.phone || '0771234567').trim();
-    const x_email = String(body.email || 'customer@zerolagtek.app').trim();
-
-    const x_ship_to_first_name = x_first_name;
-    const x_ship_to_last_name = x_last_name;
-    const x_ship_to_company = x_company;
-    const x_ship_to_address = x_address;
-    const x_ship_to_country = x_country;
-    const x_ship_to_state = x_state;
-    const x_ship_to_city = x_city;
-    const x_ship_to_zip = x_zip;
-
-    // Step 01 Hash string from Doc:
-    const list =
-      "x_test_mode=" + x_test_mode +
-      ",x_shopid=" + x_shopid +
-      ",x_amount=" + x_amount +
-      ",x_order_id=" + x_order_id +
-      ",x_response_url=" + x_response_url +
-      ",x_first_name=" + x_first_name +
-      ",x_last_name=" + x_last_name +
-      ",x_company=" + x_company +
-      ",x_address=" + x_address +
-      ",x_country=" + x_country +
-      ",x_state=" + x_state +
-      ",x_city=" + x_city +
-      ",x_zip=" + x_zip +
-      ",x_phone=" + x_phone +
-      ",x_email=" + x_email +
-      ",x_ship_to_first_name=" + x_ship_to_first_name +
-      ",x_ship_to_last_name=" + x_ship_to_last_name +
-      ",x_ship_to_company=" + x_ship_to_company +
-      ",x_ship_to_address=" + x_ship_to_address +
-      ",x_ship_to_country=" + x_ship_to_country +
-      ",x_ship_to_state=" + x_ship_to_state +
-      ",x_ship_to_city=" + x_ship_to_city +
-      ",x_ship_to_zip=" + x_ship_to_zip +
-      ",x_freight=" + x_freight +
-      ",x_platform=" + x_platform +
-      ",x_version" + x_version +
-      ",signed_field_names=" +
-      "x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names";
-
-    const hashInBase64 = crypto.createHmac('sha256', secretKey).update(list).digest('base64');
-
-    // Step 03 Exact JSON Structure from Doc:
-    const payzyPayload: Record<string, unknown> = {
-      x_test_mode,
-      x_version,
-      x_shopid,
-      x_amount,
-      x_order_id,
-      x_response_url,
-      x_first_name,
-      x_last_name,
-      x_company,
-      x_address,
-      x_country,
-      x_state,
-      x_city,
-      x_zip,
-      x_phone,
-      x_email,
-      x_ship_to_first_name,
-      x_ship_to_last_name,
-      x_ship_to_company,
-      x_ship_to_address,
-      x_ship_to_country,
-      x_ship_to_state,
-      x_ship_to_city,
-      x_ship_to_zip,
-      x_freight,
-      x_platform,
-      signed_field_names:
-        "x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names",
-      signature: hashInBase64
+    const payloadData: Record<string, string> = {
+      x_test_mode: (process.env.PAYZY_TEST_MODE || 'on').trim(),
+      x_shopid: (process.env.PAYZY_SHOP_ID || '2').trim(),
+      x_amount: finalAmount.toFixed(2),
+      x_order_id: String(body.order_id || body.orderId || `${Date.now()}`),
+      x_response_url: responseUrl,
+      x_first_name: firstName,
+      x_last_name: lastName,
+      x_company: company,
+      x_address: address,
+      x_country: country,
+      x_state: state,
+      x_city: city,
+      x_zip: zip,
+      x_phone: phone,
+      x_email: email,
+      x_ship_to_first_name: firstName,
+      x_ship_to_last_name: lastName,
+      x_ship_to_company: company,
+      x_ship_to_address: address,
+      x_ship_to_country: country,
+      x_ship_to_state: state,
+      x_ship_to_city: city,
+      x_ship_to_zip: zip,
+      x_freight: rawFreight.toFixed(2),
+      x_platform: "custom",
+      x_version: "1.0",
+      signed_field_names: "x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names"
     };
 
-    console.log('--- [DISPATCHING TO PAYZY] ---', payzyPayload);
+    const list =
+      "x_test_mode=" + payloadData.x_test_mode +
+      ",x_shopid=" + payloadData.x_shopid +
+      ",x_amount=" + payloadData.x_amount +
+      ",x_order_id=" + payloadData.x_order_id +
+      ",x_response_url=" + payloadData.x_response_url +
+      ",x_first_name=" + payloadData.x_first_name +
+      ",x_last_name=" + payloadData.x_last_name +
+      ",x_company=" + payloadData.x_company +
+      ",x_address=" + payloadData.x_address +
+      ",x_country=" + payloadData.x_country +
+      ",x_state=" + payloadData.x_state +
+      ",x_city=" + payloadData.x_city +
+      ",x_zip=" + payloadData.x_zip +
+      ",x_phone=" + payloadData.x_phone +
+      ",x_email=" + payloadData.x_email +
+      ",x_ship_to_first_name=" + payloadData.x_ship_to_first_name +
+      ",x_ship_to_last_name=" + payloadData.x_ship_to_last_name +
+      ",x_ship_to_company=" + payloadData.x_ship_to_company +
+      ",x_ship_to_address=" + payloadData.x_ship_to_address +
+      ",x_ship_to_country=" + payloadData.x_ship_to_country +
+      ",x_ship_to_state=" + payloadData.x_ship_to_state +
+      ",x_ship_to_city=" + payloadData.x_ship_to_city +
+      ",x_ship_to_zip=" + payloadData.x_ship_to_zip +
+      ",x_freight=" + payloadData.x_freight +
+      ",x_platform=" + payloadData.x_platform +
+      ",x_version" + payloadData.x_version +
+      ",signed_field_names=" + payloadData.signed_field_names;
 
-    const payzyRes = await fetch('https://api.payzypay.xyz/checkout/custom-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payzyPayload)
+    const secretKeyEnv = (process.env.PAYZY_SECRET_KEY || '').trim();
+    const secretKey = (secretKeyEnv.includes('$2b$12$') ? secretKeyEnv : '$2b$12$82C876HIXARFRAF8iQB6JO2C5Zc9NeEZqCwcLY2eJe2klTw.EGvWy').trim();
+    const signature = crypto.createHmac('sha256', secretKey).update(list).digest('base64');
+    payloadData.signature = signature;
+
+    const fullPayload = payloadData;
+
+    // Official example plugin uses JSON POST (express.json() & axios.post)
+    const response = await fetch(PAYZY_HANDSHAKE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(fullPayload),
     });
 
-    const data = await payzyRes.json().catch(() => ({}));
-    console.log('--- [PAYZY RESPONSE] ---', data);
+    // ── 405 Fallback: Gateway rejects server-side POST → return auto-submit form ──
+    if (response.status === 405) {
+      console.warn("[Payzy] 405 received on server-side POST — returning client-side form auto-submit fallback.");
+      const formFields = Object.entries(fullPayload)
+        .map(([k, v]) => `<input type="hidden" name="${k}" value="${String(v).replace(/"/g, '&quot;')}" />`)
+        .join("\n");
+      const html = `<!DOCTYPE html><html><body>
+<form id="pf" method="POST" action="${PAYZY_HANDSHAKE_URL}">
+${formFields}
+</form>
+<script>document.getElementById('pf').submit();</script>
+</body></html>`;
+      return new Response(html, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "X-Payzy-Fallback": "form-submit" },
+      });
+    }
 
-    const redirectUrl = data?.data?.url || data?.url;
+    const payzyData = await response.json().catch(() => ({}));
 
-    if (!redirectUrl || redirectUrl.includes('/fromwordpress/e1')) {
+    if (!response.ok) {
+      console.error("PayZY Gateway Error Body:", JSON.stringify(payzyData, null, 2));
       return NextResponse.json(
         { 
-          success: false, 
-          error: 'PAYZY_REJECTED', 
-          message: 'Payzy signature verification failed. Please verify PAYZY_SECRET_KEY and SHOP_ID in .env match your Payzy Portal credentials.',
-          data 
+          success: false,
+          error: payzyData.message || `PayZY initiation failed: ${response.statusText}`,
+          data: payzyData 
         },
-        { status: 400 }
+        { status: response.status }
       );
     }
 
-    return NextResponse.json({ success: true, redirect_url: redirectUrl, url: redirectUrl, data });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown Payzy checkout exception';
-    console.error('Payzy checkout exception:', error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const redirectUrl = payzyData?.url || payzyData?.payment_url || payzyData?.data?.url || payzyData?.data?.redirect_url;
+
+    if (redirectUrl) {
+      return NextResponse.json({
+        success: true,
+        url: redirectUrl,
+        redirect_url: redirectUrl,
+        data: payzyData
+      });
+    }
+
+    return NextResponse.json({ success: false, error: "Invalid response from PayZY API", data: payzyData }, { status: 502 });
+
+  } catch (error: any) {
+    console.error("PayZY Checkout Error:", error);
+    return NextResponse.json({ success: false, error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

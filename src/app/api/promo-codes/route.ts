@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
 import PromoCodeModel from '@/lib/models/PromoCode';
+import { checkAdminAuthorization } from '@/lib/adminAuth';
 
 export interface PromoCodeType {
   id: string;
@@ -20,23 +21,22 @@ export interface PromoCodeType {
 // In-memory fallback cache when MongoDB is not connected
 let inMemoryPromos: PromoCodeType[] = [];
 
-// Helper query builder that works with both MongoDB ObjectIds and custom string IDs / code names
+// Helper query builder that enforces strict string casting against NoSQL injection
 const getQuery = (idOrCode: string) => {
-  if (mongoose.Types.ObjectId.isValid(idOrCode) && idOrCode.length === 24) {
+  const cleanId = String(idOrCode || '').trim();
+  if (mongoose.Types.ObjectId.isValid(cleanId) && cleanId.length === 24) {
     return {
       $or: [
-        { _id: new mongoose.Types.ObjectId(idOrCode) },
-        { id: idOrCode },
-        { code: idOrCode.toUpperCase() },
-        { code: idOrCode }
+        { _id: new mongoose.Types.ObjectId(cleanId) },
+        { id: cleanId },
+        { code: cleanId.toUpperCase() }
       ]
     };
   }
   return {
     $or: [
-      { id: idOrCode },
-      { code: idOrCode.toUpperCase() },
-      { code: idOrCode }
+      { id: cleanId },
+      { code: cleanId.toUpperCase() }
     ]
   };
 };
@@ -77,6 +77,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!(await checkAdminAuthorization())) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin authentication required' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { code, discountType, discountValue, minOrderAmount, maxDiscountAmount, maxUsage, expiresAt, isActive } = body || {};
 
@@ -146,6 +150,10 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    if (!(await checkAdminAuthorization())) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin authentication required' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, code, discountType, discountValue, minOrderAmount, maxDiscountAmount, maxUsage, expiresAt, isActive } = body || {};
 
@@ -169,7 +177,7 @@ export async function PUT(request: Request) {
         const doc = await PromoCodeModel.findOneAndUpdate(
           getQuery(String(id)),
           updatePayload,
-          { new: true }
+          { returnDocument: 'after' }
         );
 
         if (!doc) {
@@ -201,6 +209,10 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (!(await checkAdminAuthorization())) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin authentication required' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

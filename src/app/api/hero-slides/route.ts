@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
 import HeroSlideModel from '@/lib/models/HeroSlide';
+import { checkAdminAuthorization } from '@/lib/adminAuth';
 
 export async function GET() {
   try {
@@ -46,6 +47,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!(await checkAdminAuthorization())) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin authentication required' }, { status: 401 });
+    }
+
     if (!isMongoConfigured()) {
       return NextResponse.json({ success: false, error: 'Database unconfigured' }, { status: 400 });
     }
@@ -56,21 +61,21 @@ export async function POST(request: Request) {
 
     const payload = {
       id: slideId,
-      badgeText: body.badgeText || body.badge || 'FLAGSHIP',
-      badge: body.badgeText || body.badge || 'FLAGSHIP',
-      titleFirstLine: body.titleFirstLine || '',
-      titleHighlight: body.titleHighlight || '',
-      title: body.title || `${body.titleFirstLine || ''} ${body.titleHighlight || ''}`.trim(),
-      description: body.description || body.subtitle || '',
-      subtitle: body.description || body.subtitle || '',
-      primary_button_text: body.primaryButtonText || body.primary_button_text || 'EXPLORE CATALOG',
-      primaryButtonText: body.primaryButtonText || body.primary_button_text || 'EXPLORE CATALOG',
-      primary_button_link: body.primaryButtonLink || body.primary_button_link || '#catalog',
-      primaryButtonLink: body.primaryButtonLink || body.primary_button_link || '#catalog',
-      featured_product_id: body.featuredProductId || body.featured_product_id || '',
-      featuredProductId: body.featuredProductId || body.featured_product_id || '',
-      custom_image_url: body.customImageUrl || body.custom_image_url || '',
-      customImageUrl: body.customImageUrl || body.custom_image_url || '',
+      badgeText: String(body.badgeText || body.badge || 'FLAGSHIP'),
+      badge: String(body.badgeText || body.badge || 'FLAGSHIP'),
+      titleFirstLine: String(body.titleFirstLine || ''),
+      titleHighlight: String(body.titleHighlight || ''),
+      title: String(body.title || `${body.titleFirstLine || ''} ${body.titleHighlight || ''}`).trim(),
+      description: String(body.description || body.subtitle || ''),
+      subtitle: String(body.description || body.subtitle || ''),
+      primary_button_text: String(body.primaryButtonText || body.primary_button_text || 'EXPLORE CATALOG'),
+      primaryButtonText: String(body.primaryButtonText || body.primary_button_text || 'EXPLORE CATALOG'),
+      primary_button_link: String(body.primaryButtonLink || body.primary_button_link || '#catalog'),
+      primaryButtonLink: String(body.primaryButtonLink || body.primary_button_link || '#catalog'),
+      featured_product_id: String(body.featuredProductId || body.featured_product_id || ''),
+      featuredProductId: String(body.featuredProductId || body.featured_product_id || ''),
+      custom_image_url: String(body.customImageUrl || body.custom_image_url || ''),
+      customImageUrl: String(body.customImageUrl || body.custom_image_url || ''),
       is_active: body.isActive !== undefined ? Boolean(body.isActive) : true,
       isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
     };
@@ -86,8 +91,13 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (!(await checkAdminAuthorization())) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin authentication required' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const idParam = searchParams.get('id');
+    const id = idParam ? String(idParam).trim() : null;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'Slide ID required' }, { status: 400 });

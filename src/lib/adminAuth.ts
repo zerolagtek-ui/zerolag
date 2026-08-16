@@ -85,3 +85,19 @@ export function verifyAdminToken(token: string): AdminSessionPayload | null {
   }
 }
 
+/**
+ * Server-side helper to check if current request has a valid admin session cookie.
+ */
+export async function checkAdminAuthorization(): Promise<boolean> {
+  try {
+    const { cookies } = await import('next/headers');
+    const cookieStore = await cookies();
+    const token = cookieStore.get('zerolag_admin_session')?.value;
+    if (!token) return false;
+    const payload = verifyAdminToken(token);
+    return Boolean(payload && payload.email);
+  } catch {
+    return false;
+  }
+}
+

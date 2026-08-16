@@ -128,7 +128,117 @@ function cleanImageUrl(rawUrl: string): string {
   return normalizeImageUrl(rawUrl) || fallback;
 }
 
-export default function AdminPage() {
+interface PaginationToolbarProps {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  onPageChange: (newPage: number) => void;
+  onItemsPerPageChange: (newLimit: number) => void;
+  itemName?: string;
+}
+
+function PaginationToolbar({
+  currentPage,
+  totalPages,
+  totalItems,
+  itemsPerPage,
+  onPageChange,
+  onItemsPerPageChange,
+  itemName = 'items'
+}: PaginationToolbarProps) {
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push('...');
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) {
+        if (!pages.includes(i)) pages.push(i);
+      }
+      if (currentPage < totalPages - 2) pages.push('...');
+      if (!pages.includes(totalPages)) pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div className="bg-[#0a0c10] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs shadow-sm mt-4">
+      <div className="flex items-center gap-4 text-zinc-400">
+        <span>
+          Showing <strong className="text-white">{startItem}</strong> - <strong className="text-white">{endItem}</strong> of <strong className="text-lime-400">{totalItems}</strong> {itemName}
+        </span>
+        <div className="flex items-center gap-2 border-l border-zinc-800 pl-4">
+          <label htmlFor={`rows-per-page-${itemName}`} className="text-zinc-500 text-[11px]">Rows per page:</label>
+          <select
+            id={`rows-per-page-${itemName}`}
+            value={itemsPerPage}
+            onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+            className="bg-zinc-950 border border-zinc-800 text-lime-400 rounded-lg px-2.5 py-1 text-xs focus:border-lime-400 focus:outline-none cursor-pointer font-mono"
+          >
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage <= 1}
+          className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-lime-400 hover:text-lime-400 text-zinc-300 font-bold transition-all disabled:opacity-30 disabled:hover:border-zinc-800 disabled:hover:text-zinc-300 cursor-pointer disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+
+        {getPageNumbers().map((p, idx) => {
+          if (p === '...') {
+            return (
+              <span key={`ellipsis-${idx}`} className="px-2 py-1 text-zinc-600">
+                ...
+              </span>
+            );
+          }
+          const pageNum = p as number;
+          const isActive = pageNum === currentPage;
+          return (
+            <button
+              key={`page-${pageNum}`}
+              onClick={() => onPageChange(pageNum)}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-lime-400 text-slate-950 shadow-md shadow-lime-400/20'
+                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white'
+              }`}
+            >
+              {pageNum}
+            </button>
+          );
+        })}
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage >= totalPages || totalPages === 0}
+          className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-lime-400 hover:text-lime-400 text-zinc-300 font-bold transition-all disabled:opacity-30 disabled:hover:border-zinc-800 disabled:hover:text-zinc-300 cursor-pointer disabled:cursor-not-allowed"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'products' | 'orders' | 'slides' | 'categories' | 'reviews' | 'bank' | 'shipping' | 'branding' | 'promos' } = {}) {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
@@ -137,7 +247,16 @@ export default function AdminPage() {
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'slides' | 'categories' | 'reviews' | 'bank' | 'shipping' | 'branding' | 'promos'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'slides' | 'categories' | 'reviews' | 'bank' | 'shipping' | 'branding' | 'promos'>(initialTab);
+
+  // Server-Side Pagination state for Products & Orders
+  const [productsPage, setProductsPage] = useState<number>(1);
+  const [productsLimit, setProductsLimit] = useState<number>(10);
+  const [productsTotal, setProductsTotal] = useState<number>(0);
+
+  const [ordersPage, setOrdersPage] = useState<number>(1);
+  const [ordersLimit, setOrdersLimit] = useState<number>(10);
+  const [ordersTotal, setOrdersTotal] = useState<number>(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
@@ -310,9 +429,98 @@ export default function AdminPage() {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (page = productsPage, limit = productsLimit, search = searchQuery, category = selectedCategoryFilter) => {
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit)
+      });
+      if (category && category !== 'all') params.append('category', category);
+      if (search && search.trim()) params.append('search', search.trim());
+
+      const res = await fetch(`/api/products?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+          const total = data.pagination?.total ?? data.products.length;
+          setProductsTotal(total);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching admin paginated products:', err);
+    }
     const dbProducts = await syncProductsFromDatabase();
-    setProducts(dbProducts);
+    let filtered = dbProducts;
+    if (category && category !== 'all') {
+      filtered = filtered.filter(p => p.category?.toLowerCase() === category.toLowerCase());
+    }
+    if (search && search.trim()) {
+      const q = search.toLowerCase().trim();
+      filtered = filtered.filter(p => p.name?.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q));
+    }
+    setProductsTotal(filtered.length);
+    const start = (page - 1) * limit;
+    setProducts(filtered.slice(start, start + limit));
+  };
+
+  const fetchOrders = async (page = ordersPage, limit = ordersLimit, search = searchQuery) => {
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit)
+      });
+      if (search && search.trim()) params.append('search', search.trim());
+
+      const res = await fetch(`/api/orders?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.orders)) {
+          const formattedOrders: OrderDetails[] = data.orders.map((o: any) => ({
+            id: o.id,
+            customerName: o.customer_name || o.customerName || 'Customer',
+            email: o.customer_email || o.email || '',
+            phone: o.customer_phone || o.phone || '',
+            secondaryPhone: o.secondary_phone || o.secondaryPhone || '',
+            address: o.shipping_address || o.address || '',
+            city: o.city || '',
+            postalCode: o.postal_code || '',
+            paymentMethod: o.payment_method || o.paymentMethod || 'bank-transfer',
+            paymentSlipUrl: o.payment_slip_url || o.paymentSlipUrl || '',
+            courier: o.courier || '',
+            trackingNumber: o.tracking_number || o.trackingNumber || '',
+            items: o.items || [],
+            subtotalLkr: Number(o.subtotal || o.subtotalLkr) || 0,
+            shippingLkr: Number(o.shipping_fee || o.shippingLkr) || 0,
+            totalLkr: Number(o.total_amount || o.totalLkr) || 0,
+            orderStatus: o.status || o.orderStatus || 'Pending',
+            paymentStatus: o.payment_status || o.paymentStatus || 'Pending',
+            createdAt: o.created_at || o.createdAt || new Date().toISOString()
+          }));
+          setOrders(formattedOrders);
+          const total = data.pagination?.total ?? formattedOrders.length;
+          setOrdersTotal(total);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching admin paginated orders:', err);
+    }
+    const stored = getStoredOrders();
+    let filtered = stored;
+    if (search && search.trim()) {
+      const q = search.toLowerCase().trim();
+      filtered = filtered.filter(o =>
+        (o.id || '').toLowerCase().includes(q) ||
+        (o.customerName || '').toLowerCase().includes(q) ||
+        (o.email || '').toLowerCase().includes(q) ||
+        (o.phone || '').toLowerCase().includes(q)
+      );
+    }
+    setOrdersTotal(filtered.length);
+    const start = (page - 1) * limit;
+    setOrders(filtered.slice(start, start + limit));
   };
 
   const fetchSlides = async () => {
@@ -462,13 +670,13 @@ export default function AdminPage() {
   };
 
   const refreshData = async () => {
-    fetchProducts();
+    await fetchProducts(productsPage, productsLimit, searchQuery, selectedCategoryFilter);
+    await fetchOrders(ordersPage, ordersLimit, searchQuery);
     await fetchSlides();
     await fetchLogo();
     await fetchBank();
     await fetchShippingRates();
     await fetchPromoCodes();
-    setOrders(getStoredOrders());
     setCategories(getDynamicCategories());
     fetchReviews();
   };
@@ -480,6 +688,18 @@ export default function AdminPage() {
     setBankConfig(getStoredBankDetails());
     setShippingRates(getStoredShippingRates());
   };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProducts(productsPage, productsLimit, searchQuery, selectedCategoryFilter);
+    }
+  }, [productsPage, productsLimit, searchQuery, selectedCategoryFilter, isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchOrders(ordersPage, ordersLimit, searchQuery);
+    }
+  }, [ordersPage, ordersLimit, searchQuery, isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -1036,14 +1256,7 @@ export default function AdminPage() {
     setTimeout(() => setLogoNotice(false), 3000);
   };
 
-  const filteredProducts = products.filter(p => {
-    if (selectedCategoryFilter !== 'all' && p.category !== selectedCategoryFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
-    }
-    return true;
-  });
+  const filteredProducts = products;
 
   const totalRevenueLkr = orders.reduce((sum, o) => sum + o.totalLkr, 0);
   const pendingOrdersCount = orders.filter(o => o.orderStatus === 'Pending').length;
@@ -1602,6 +1815,19 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+
+            <PaginationToolbar
+              currentPage={productsPage}
+              totalPages={Math.ceil(productsTotal / productsLimit) || 1}
+              totalItems={productsTotal}
+              itemsPerPage={productsLimit}
+              onPageChange={(newPage) => setProductsPage(newPage)}
+              onItemsPerPageChange={(newLimit) => {
+                setProductsLimit(newLimit);
+                setProductsPage(1);
+              }}
+              itemName="products"
+            />
           </div>
         )}
 
@@ -1715,6 +1941,19 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+
+            <PaginationToolbar
+              currentPage={ordersPage}
+              totalPages={Math.ceil(ordersTotal / ordersLimit) || 1}
+              totalItems={ordersTotal}
+              itemsPerPage={ordersLimit}
+              onPageChange={(newPage) => setOrdersPage(newPage)}
+              onItemsPerPageChange={(newLimit) => {
+                setOrdersLimit(newLimit);
+                setOrdersPage(1);
+              }}
+              itemName="orders"
+            />
 
             {/* Shipping Dispatch Confirmation Modal */}
             {shippingModalOpen && selectedShippingOrder && (

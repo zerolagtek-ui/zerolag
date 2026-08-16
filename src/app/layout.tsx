@@ -33,12 +33,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="dark" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body className="bg-black text-slate-100 min-h-screen max-w-full overflow-x-hidden flex flex-col selection:bg-lime-400 selection:text-slate-950">
         <Script
           id="payhere-sdk"
           src={PAYHERE_PRELOAD_URL}
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
         />
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange enableSystem={false}>
           <CartProvider>

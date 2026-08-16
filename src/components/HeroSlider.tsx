@@ -15,27 +15,42 @@ export function HeroSlider() {
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  const syncData = async () => {
-    try {
-      const fetchedSlides = await syncHeroSlidesFromSupabase();
-      const active = fetchedSlides.filter(s => s.isActive !== false);
-      setSlides(active.length > 0 ? active : fetchedSlides);
-      setProducts(getStoredProducts() || []);
-    } catch (err) {
-      console.error('[HeroSlider] Error syncing slides:', err);
-    }
-  };
-
   useEffect(() => {
-    syncData();
-    if (typeof window !== 'undefined') {
-      window.addEventListener('zerolag-slides-updated', syncData);
-      window.addEventListener('zerolag-products-updated', syncData);
+    let isMounted = true;
+
+    async function loadSlides() {
+      try {
+        const res = await fetch('/api/hero-slides');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.success && Array.isArray(data.slides)) {
+            const active = data.slides.filter((s: any) => s.isActive !== false);
+            setSlides(active.length > 0 ? active : data.slides);
+            setProducts(getStoredProducts() || []);
+          }
+        }
+      } catch (err) {
+        console.error('[HeroSlider] Error loading slides:', err);
+      }
     }
+
+    loadSlides();
+
+    const handleUpdate = () => {
+      if (!isMounted) return;
+      setProducts(getStoredProducts() || []);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('zerolag-slides-updated', handleUpdate);
+      window.addEventListener('zerolag-products-updated', handleUpdate);
+    }
+
     return () => {
+      isMounted = false;
       if (typeof window !== 'undefined') {
-        window.removeEventListener('zerolag-slides-updated', syncData);
-        window.removeEventListener('zerolag-products-updated', syncData);
+        window.removeEventListener('zerolag-slides-updated', handleUpdate);
+        window.removeEventListener('zerolag-products-updated', handleUpdate);
       }
     };
   }, []);

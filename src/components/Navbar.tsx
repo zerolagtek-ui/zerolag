@@ -46,6 +46,11 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   const [products, setProducts] = useState<Product[]>([]);
   const [siteLogo, setSiteLogo] = useState<string>(() => cleanLogoUrl(getStoredSiteLogo()));
   const [logoError, setLogoError] = useState<boolean>(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Search autocomplete state
   const [inputVal, setInputVal] = useState<string>(searchQuery || '');
@@ -260,8 +265,8 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
         <div className="flex items-center justify-between h-16 w-full gap-2">
 
           {/* Compact Logo Section */}
-          <Link href="/" className="flex items-center gap-2 group shrink-0">
-            {siteLogo && !logoError ? (
+          <Link href="/" className="flex items-center gap-2 group shrink-0" suppressHydrationWarning>
+            {mounted && siteLogo && !logoError ? (
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
                 <img
                   src={siteLogo}

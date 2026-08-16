@@ -11,6 +11,7 @@ export function Footer() {
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
   const [siteLogo, setSiteLogo] = useState<string>(() => cleanLogoUrl(getStoredSiteLogo()));
   const [logoError, setLogoError] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
 
   const loadLogo = async () => {
     const cached = cleanLogoUrl(getStoredSiteLogo());
@@ -29,6 +30,7 @@ export function Footer() {
 
   // Initial logo sync on mount & event listeners setup
   useEffect(() => {
+    setMounted(true);
     loadLogo();
     window.addEventListener('zerolag-logo-updated', loadLogo);
     window.addEventListener('site_logo_updated', loadLogo);
@@ -89,7 +91,7 @@ export function Footer() {
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              {siteLogo && !logoError ? (
+              {mounted && siteLogo && !logoError ? (
                 <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
                   <img
                     src={siteLogo}

@@ -46,7 +46,6 @@ function HomeContent() {
         setProducts(stored);
       }
       try {
-        await syncHeroSlidesFromSupabase();
         const fetched = await getProductsFromSupabase();
         if (fetched && fetched.length > 0) {
           setProducts(fetched);

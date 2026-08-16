@@ -31,9 +31,16 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
   const [inStockOnly, setInStockOnly] = useState(false);
 
   // Progressive batch loading state (Infinite Scroll)
-  const [displayedCount, setDisplayedCount] = useState(8);
+  const ITEMS_PER_PAGE = 20;
+  const [displayedCount, setDisplayedCount] = useState(ITEMS_PER_PAGE);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const observerRef = useRef<HTMLDivElement | null>(null);
+
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (initialProducts && initialProducts.length > 0) {
@@ -96,7 +103,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
   // Reset pagination batch when filters change
   useEffect(() => {
-    setDisplayedCount(8);
+    setDisplayedCount(ITEMS_PER_PAGE);
   }, [selectedCategory, searchQuery, sortBy, inStockOnly]);
 
   const handleCategoryClick = (catId: string) => {
@@ -131,7 +138,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
     setTimeout(() => {
-      setDisplayedCount((prev) => prev + 4);
+      setDisplayedCount((prev) => prev + ITEMS_PER_PAGE);
       setIsLoadingMore(false);
     }, 400);
   };
@@ -148,7 +155,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
           handleLoadMore();
         }
       },
-      { threshold: 0.2 }
+      { rootMargin: '300px', threshold: 0.1 }
     );
 
     observer.observe(target);
@@ -174,7 +181,9 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
           </div>
 
           <div className="flex items-center gap-3 text-xs font-mono text-zinc-400">
-            <span>Showing {visibleProducts.length} of {filteredProducts.length} items</span>
+            <span suppressHydrationWarning>
+              {mounted ? `Showing ${visibleProducts.length} of ${filteredProducts.length} items` : 'Loading items...'}
+            </span>
           </div>
         </div>
 
@@ -188,7 +197,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
                 : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
             }`}
           >
-            All Categories ({products.length})
+            <span suppressHydrationWarning>All Categories ({mounted ? products.length : 0})</span>
           </button>
 
           {categories.map((cat) => {
@@ -206,7 +215,9 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
                 }`}
               >
                 <span>{cat.name}</span>
-                <span className="text-[10px] opacity-75">({count})</span>
+                <span className="text-[10px] opacity-75" suppressHydrationWarning>
+                  ({mounted ? count : 0})
+                </span>
               </button>
             );
           })}
