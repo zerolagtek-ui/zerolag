@@ -277,7 +277,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             email: formData.email,
             address: formData.address,
             city: formData.city,
-            response_url: `${originUrl}/api/payzy/verify`
+            response_url: 'https://zerolagtek.app/api/payzy/verify'
           })
         });
 
