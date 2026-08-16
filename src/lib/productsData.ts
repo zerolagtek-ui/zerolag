@@ -116,8 +116,16 @@ export function normalizeCategory(cat?: string): string {
 }
 
 export function isCategoryMatch(productCategory?: string, targetCategory?: string): boolean {
+  if (!targetCategory || targetCategory === 'all') return true;
+  if (!productCategory) return false;
+
+  const targetSlug = generateSlug(targetCategory);
+  const prodSlug = generateSlug(productCategory);
+
+  if (targetSlug === prodSlug) return true;
+  if (productCategory.trim().toLowerCase() === targetCategory.trim().toLowerCase()) return true;
+
   const normTarget = normalizeCategory(targetCategory);
-  if (normTarget === 'all') return true;
   const normProduct = normalizeCategory(productCategory);
   return normProduct === normTarget;
 }

@@ -48,6 +48,33 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
     }
   }, [initialProducts]);
 
+  async function fetchDynamicCategories() {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        const apiCategories = Array.isArray(data) ? data : data.categories || [];
+        if (apiCategories.length > 0) {
+          const formatted: Category[] = apiCategories.map((c: any) => ({
+            id: c.slug || c.id || String(c._id || c.name.toLowerCase().replace(/\s+/g, '-')),
+            name: c.name,
+            iconName: c.icon || c.iconName || '',
+            description: c.description || ''
+          }));
+          setCategories(formatted);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch categories from API:', err);
+    }
+
+    const storedCategories = getDynamicCategories();
+    if (storedCategories && storedCategories.length > 0) {
+      setCategories(storedCategories);
+    }
+  }
+
   useEffect(() => {
     async function loadGridProducts() {
       try {
@@ -67,28 +94,31 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
           setProducts(stored);
         }
       }
-      setCategories(getDynamicCategories());
+      await fetchDynamicCategories();
     }
 
     loadGridProducts();
 
-    const handleUpdate = () => {
+    const handleProductsUpdate = () => {
       const stored = getStoredProducts();
       if (stored && stored.length > 0) {
         setProducts(stored);
       }
-      setCategories(getDynamicCategories());
+    };
+
+    const handleCategoriesUpdate = () => {
+      fetchDynamicCategories();
     };
 
     if (typeof window !== 'undefined') {
-      window.addEventListener('zerolag-products-updated', handleUpdate);
-      window.addEventListener('zerolag-categories-updated', handleUpdate);
+      window.addEventListener('zerolag-products-updated', handleProductsUpdate);
+      window.addEventListener('zerolag-categories-updated', handleCategoriesUpdate);
     }
 
     return () => {
       if (typeof window !== 'undefined') {
-        window.removeEventListener('zerolag-products-updated', handleUpdate);
-        window.removeEventListener('zerolag-categories-updated', handleUpdate);
+        window.removeEventListener('zerolag-products-updated', handleProductsUpdate);
+        window.removeEventListener('zerolag-categories-updated', handleCategoriesUpdate);
       }
     };
   }, []);

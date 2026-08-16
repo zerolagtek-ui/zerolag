@@ -84,7 +84,26 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     }
   };
 
-  const syncCategories = () => {
+  const syncCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const apiCategories = Array.isArray(data) ? data : data.categories || [];
+        if (apiCategories.length > 0) {
+          const formatted: Category[] = apiCategories.map((c: any) => ({
+            id: c.slug || c.id || String(c._id || c.name.toLowerCase().replace(/\s+/g, '-')),
+            name: c.name,
+            iconName: c.icon || c.iconName || '',
+            description: c.description || ''
+          }));
+          setCategories(formatted);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Navbar Category Sync Error]:', err);
+    }
     setCategories(getDynamicCategories());
   };
 

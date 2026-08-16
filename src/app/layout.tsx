@@ -12,18 +12,31 @@ const PAYHERE_PRELOAD_URL =
     : 'https://sandbox.payhere.lk/payhere.js');
 
 export const metadata: Metadata = {
-  title: 'ZeroLag Tek | Premier Gaming Hardware & Peripherals Sri Lanka',
-  description: 'Buy genuine gaming mice, mechanical keyboards, headsets, routers, webcams & chargers with PayHere, Payzy, and Cash on Delivery with islandwide fast delivery.',
-  keywords: ['ZeroLag Tek Store', 'Gaming Mice Sri Lanka', 'Mechanical Keyboards Colombo', 'PayHere E-Commerce', 'Tech Store LK'],
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://zerolagtek.app'),
+  title: {
+    default: 'ZeroLag Tek | Premium Gaming Accessories & Tech Gear Sri Lanka',
+    template: '%s | ZeroLag Tek'
+  },
+  description: 'Shop high-performance gaming peripherals, custom keyboards, mechanical switches, mice, headsets and tech essentials in Sri Lanka with Islandwide Delivery.',
+  keywords: ['gaming gear sri lanka', 'mechanical keyboards', 'gaming mouse', 'custom tech accessories', 'zerolag tek'],
   icons: {
     icon: '/icon.svg',
     shortcut: '/icon.svg',
     apple: '/icon.svg',
   },
   openGraph: {
-    title: 'ZeroLag Tek | Premier Gaming Hardware & Peripherals',
-    description: 'Islandwide Delivery • Genuine Products • PayHere & Payzy Gateway Approved',
-    type: 'website'
+    title: 'ZeroLag Tek | Premium Tech & Gaming Accessories',
+    description: 'High-performance tech and gaming gear with fast Islandwide Delivery in Sri Lanka.',
+    url: process.env.NEXT_PUBLIC_SITE_URL || 'https://zerolagtek.app',
+    siteName: 'ZeroLag Tek',
+    locale: 'en_US',
+    type: 'website',
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
+    other: {
+      'facebook-domain-verification': process.env.NEXT_PUBLIC_FACEBOOK_DOMAIN_VERIFICATION || '',
+    }
   }
 };
 

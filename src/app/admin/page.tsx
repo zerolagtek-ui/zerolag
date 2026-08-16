@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Product, OrderDetails, OrderStatus, BankAccountDetails, HeroSlide, Category, ShippingOption } from '@/types';
-import { formatPrice, getProductSlug } from '@/lib/productsData';
+import { formatPrice, getProductSlug, isCategoryMatch } from '@/lib/productsData';
 import {
   getStoredProducts,
   syncProductsFromDatabase,
@@ -430,40 +430,23 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     }
   };
 
-  const fetchProducts = async (page = productsPage, limit = productsLimit, search = searchQuery, category = selectedCategoryFilter) => {
+  const fetchProducts = async () => {
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: String(limit)
-      });
-      if (category && category !== 'all') params.append('category', category);
-      if (search && search.trim()) params.append('search', search.trim());
-
-      const res = await fetch(`/api/products?${params.toString()}`);
+      const res = await fetch('/api/products?limit=1000');
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (data.success && Array.isArray(data.products)) {
           setProducts(data.products);
-          const total = data.pagination?.total ?? data.products.length;
-          setProductsTotal(total);
+          setProductsTotal(data.products.length);
           return;
         }
       }
     } catch (err) {
-      console.error('Error fetching admin paginated products:', err);
+      console.error('Error fetching admin products:', err);
     }
     const dbProducts = await syncProductsFromDatabase();
-    let filtered = dbProducts;
-    if (category && category !== 'all') {
-      filtered = filtered.filter(p => p.category?.toLowerCase() === category.toLowerCase());
-    }
-    if (search && search.trim()) {
-      const q = search.toLowerCase().trim();
-      filtered = filtered.filter(p => p.name?.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q));
-    }
-    setProductsTotal(filtered.length);
-    const start = (page - 1) * limit;
-    setProducts(filtered.slice(start, start + limit));
+    setProducts(dbProducts || []);
+    setProductsTotal((dbProducts || []).length);
   };
 
   const fetchOrders = async (page = ordersPage, limit = ordersLimit, search = searchQuery) => {
@@ -688,7 +671,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
   };
 
   const refreshData = async () => {
-    await fetchProducts(productsPage, productsLimit, searchQuery, selectedCategoryFilter);
+    await fetchProducts();
     await fetchOrders(ordersPage, ordersLimit, searchQuery);
     await fetchSlides();
     await fetchLogo();
@@ -706,12 +689,6 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     setBankConfig(getStoredBankDetails());
     setShippingRates(getStoredShippingRates());
   };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchProducts(productsPage, productsLimit, searchQuery, selectedCategoryFilter);
-    }
-  }, [productsPage, productsLimit, searchQuery, selectedCategoryFilter, isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -1301,7 +1278,29 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     setTimeout(() => setLogoNotice(false), 3000);
   };
 
-  const filteredProducts = products;
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch = !searchQuery.trim() ||
+      p.name?.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
+      p.brand?.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
+      p.id?.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    const matchesCat = selectedCategoryFilter === 'all' ||
+      p.category?.toLowerCase() === selectedCategoryFilter.toLowerCase() ||
+      isCategoryMatch(p.category, selectedCategoryFilter);
+    return matchesSearch && matchesCat;
+  });
+
+  const totalProductPages = Math.ceil(filteredProducts.length / productsLimit) || 1;
+
+  useEffect(() => {
+    if (productsPage > totalProductPages) {
+      setProductsPage(1);
+    }
+  }, [filteredProducts.length, totalProductPages, productsPage]);
+
+  const paginatedProducts = filteredProducts.slice(
+    (productsPage - 1) * productsLimit,
+    productsPage * productsLimit
+  );
 
   const totalRevenueLkr = orders.reduce((sum, o) => sum + o.totalLkr, 0);
   const pendingOrdersCount = orders.filter(o => o.orderStatus === 'Pending').length;
@@ -1802,7 +1801,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800 text-zinc-300">
-                  {filteredProducts.map(product => (
+                  {paginatedProducts.map(product => (
                     <tr key={product.id} className="hover:bg-zinc-800/50 transition-colors">
                       <td className="p-4 flex items-center gap-3">
                         <img
@@ -1863,8 +1862,8 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
             <PaginationToolbar
               currentPage={productsPage}
-              totalPages={Math.ceil(productsTotal / productsLimit) || 1}
-              totalItems={productsTotal}
+              totalPages={totalProductPages}
+              totalItems={filteredProducts.length}
               itemsPerPage={productsLimit}
               onPageChange={(newPage) => setProductsPage(newPage)}
               onItemsPerPageChange={(newLimit) => {
