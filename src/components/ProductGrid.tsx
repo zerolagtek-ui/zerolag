@@ -159,7 +159,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
   return (
     <section id="products" className="py-12 bg-black text-white transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-zinc-800 pb-6 gap-4">
@@ -259,7 +259,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
         {/* Main Product Cards Grid */}
         {visibleProducts.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
             {visibleProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}

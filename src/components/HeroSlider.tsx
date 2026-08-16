@@ -80,7 +80,7 @@ export function HeroSlider() {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-6">
+    <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 my-6">
       <div
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -92,7 +92,7 @@ export function HeroSlider() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:2rem_2rem] pointer-events-none" />
 
         {/* Responsive Grid Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 items-center min-h-[420px] lg:min-h-[480px] p-6 sm:p-8 lg:p-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 items-center min-h-[420px] lg:min-h-[500px] p-6 sm:p-8 lg:p-12 gap-8">
           
           {/* Left Content Column */}
           <div className="lg:col-span-7 flex flex-col justify-center space-y-4 z-10">
@@ -106,12 +106,12 @@ export function HeroSlider() {
             </div>
 
             {/* Main Heading */}
-            <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-tight max-w-xl">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight max-w-2xl 2xl:max-w-3xl">
               {slideTitle}
             </h1>
 
             {/* Subtitle / Description */}
-            <p className="text-sm md:text-base text-gray-400 max-w-lg line-clamp-2 md:line-clamp-3 leading-relaxed">
+            <p className="text-sm md:text-base lg:text-lg text-gray-400 max-w-xl 2xl:max-w-2xl line-clamp-2 md:line-clamp-3 leading-relaxed">
               {slideSubtitle}
             </p>
 
@@ -137,7 +137,7 @@ export function HeroSlider() {
             </div>
 
             {/* Trust Badges Bar */}
-            <div className="pt-4 border-t border-white/10 w-full max-w-lg grid grid-cols-3 gap-2 text-[11px] font-mono text-zinc-400">
+            <div className="pt-4 border-t border-white/10 w-full max-w-xl 2xl:max-w-2xl grid grid-cols-3 gap-2 text-[11px] lg:text-xs font-mono text-zinc-400">
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-lime-400 shrink-0" />
                 <span className="truncate">Official Warranty</span>
@@ -155,8 +155,8 @@ export function HeroSlider() {
           </div>
 
           {/* Right Image Column */}
-          <div className="lg:col-span-5 flex items-center justify-center relative w-full h-[260px] sm:h-[320px] lg:h-full z-10">
-            <div className="relative w-full max-w-md h-full min-h-[240px] flex items-center justify-center">
+          <div className="lg:col-span-5 flex items-center justify-center relative w-full h-[260px] sm:h-[320px] lg:h-full min-h-[300px] lg:min-h-[380px] z-10">
+            <div className="relative w-full max-w-md lg:max-w-lg 2xl:max-w-xl h-full min-h-[260px] lg:min-h-[360px] flex items-center justify-center">
               {!isImageBroken && slideImgSrc ? (
                 <Image
                   src={slideImgSrc}

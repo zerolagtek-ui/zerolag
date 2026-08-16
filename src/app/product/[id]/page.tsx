@@ -185,7 +185,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     return (
       <div className="bg-black text-white min-h-screen flex flex-col justify-between font-sans">
         <Navbar />
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-8 animate-pulse">
+        <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-8 animate-pulse">
           {/* Breadcrumb Skeleton */}
           <div className="flex items-center gap-2">
             <div className="h-4 w-16 bg-zinc-800 rounded-md"></div>
@@ -302,7 +302,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     <div className="min-h-screen bg-black text-white flex flex-col font-sans">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-8">
+      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-8">
         
         {/* Breadcrumb Navigation */}
         <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 overflow-x-auto whitespace-nowrap pb-2">

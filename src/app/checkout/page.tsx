@@ -488,8 +488,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white py-8 sm:py-12 px-4">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="min-h-screen bg-black text-white py-8 sm:py-12">
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         
         {/* Header Navigation */}
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 text-xs font-mono">

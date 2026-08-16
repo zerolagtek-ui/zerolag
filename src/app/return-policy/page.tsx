@@ -13,7 +13,7 @@ export default function ReturnPolicyPage() {
     <div className="min-h-screen bg-black text-white flex flex-col font-sans">
       <Navbar />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
+      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
         
         {/* Navigation Breadcrumb */}
         <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">

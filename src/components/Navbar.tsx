@@ -256,7 +256,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
       </div>
 
       {/* Main Header Container */}
-      <div className="w-full max-w-full px-3 sm:px-6">
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 w-full gap-2">
 
           {/* Compact Logo Section */}

@@ -1140,7 +1140,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col md:flex-row transition-colors font-mono">
+    <div className="w-full max-w-[1728px] mx-auto min-h-screen bg-black text-white flex flex-col md:flex-row transition-colors font-mono">
 
       {/* Mobile Top Header with Hamburger Toggle (Visible on < md) */}
       <div className="md:hidden sticky top-0 z-40 bg-[#08090d] border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
