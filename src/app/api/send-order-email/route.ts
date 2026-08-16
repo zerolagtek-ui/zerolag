@@ -171,6 +171,8 @@ export async function POST(request: Request) {
       </html>
     `;
 
+    const paymentSlipUrl = body.paymentSlipUrl || body.payment_slip_url || body.bankSlipUrl;
+
     // 2. Admin Instant Notification HTML Template (Cyberpunk Alert UI)
     const adminEmailHtml = `
       <!DOCTYPE html>
@@ -200,6 +202,7 @@ export async function POST(request: Request) {
             <p style="margin: 4px 0;"><strong>Phone:</strong> ${customerPhone}</p>
             <p style="margin: 4px 0;"><strong>Shipping Address:</strong> ${shippingAddress}</p>
             <p style="margin: 4px 0;"><strong>Payment Option:</strong> ${paymentMethod}</p>
+            ${paymentSlipUrl ? `<p style="margin: 6px 0; background-color: #162032; padding: 8px 12px; border-radius: 8px; border: 1px solid #00d2ff;"><strong style="color: #00d2ff;">📄 Bank Deposit Slip:</strong> <a href="${paymentSlipUrl}" target="_blank" style="color: #a3e635; font-weight: bold; text-decoration: underline;">View Uploaded Slip / Receipt</a></p>` : ''}
             <p style="margin: 4px 0;"><strong>Total Revenue:</strong> <span style="color: #a3e635; font-weight: bold; font-size: 16px;">LKR ${totalAmount.toLocaleString()}</span></p>
           </div>
 

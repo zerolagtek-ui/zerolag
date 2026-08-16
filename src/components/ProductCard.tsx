@@ -81,18 +81,23 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="space-y-1.5 sm:space-y-2 flex-1 flex flex-col justify-between">
         <div>
           {/* Brand & Rating */}
-          <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-zinc-400 font-mono">
-            <span className="truncate max-w-[80px] sm:max-w-none">{product.brand}</span>
-            {product.reviewsCount && product.reviewsCount > 0 ? (
-              <div className="flex items-center gap-0.5 sm:gap-1 text-amber-400 font-bold">
-                <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-400" />
-                <span>{product.rating ? product.rating.toFixed(1) : '0.0'}</span>
-                <span className="text-zinc-500 hidden sm:inline">({product.reviewsCount})</span>
+          {(() => {
+            const revCount = (product as any).reviews?.length || product.reviewsCount || (product as any).reviewCount || 0;
+            return (
+              <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-zinc-400 font-mono">
+                <span className="truncate max-w-[80px] sm:max-w-none">{product.brand}</span>
+                {revCount > 0 ? (
+                  <div className="flex items-center gap-0.5 sm:gap-1 text-amber-400 font-bold">
+                    <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-400" />
+                    <span>{product.rating ? product.rating.toFixed(1) : '0.0'}</span>
+                    <span className="text-zinc-500 hidden sm:inline">({revCount})</span>
+                  </div>
+                ) : (
+                  <span className="text-zinc-500 text-[9px] sm:text-[10px]">No reviews yet</span>
+                )}
               </div>
-            ) : (
-              <span className="text-zinc-500 text-[9px] sm:text-[10px]">No reviews yet</span>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Product Name */}
           <h3 className="font-semibold text-white text-xs sm:text-sm mt-1 line-clamp-2 hover:text-lime-400 transition-colors leading-snug">

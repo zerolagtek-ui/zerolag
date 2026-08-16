@@ -3,17 +3,6 @@ import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
 import PromoCodeModel from '@/lib/models/PromoCode';
 import { formatPrice } from '@/lib/productsData';
 
-// Fallback in-memory check
-const defaultSeedPromo = {
-  id: 'promo-zerolag10',
-  code: 'ZEROLAG10',
-  discountType: 'percentage' as const,
-  discountValue: 10,
-  minOrderAmount: 0,
-  isActive: true,
-  usageCount: 0
-};
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -36,11 +25,6 @@ export async function POST(request: Request) {
       if (conn) {
         promoDoc = await PromoCodeModel.findOne({ code: cleanCode }).lean();
       }
-    }
-
-    // Fallback if not found in database or database unconfigured
-    if (!promoDoc && cleanCode === 'ZEROLAG10') {
-      promoDoc = defaultSeedPromo;
     }
 
     if (!promoDoc) {

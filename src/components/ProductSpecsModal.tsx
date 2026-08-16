@@ -87,15 +87,31 @@ export function ProductSpecsModal({ product, onClose }: { product: Product | nul
               </h2>
 
               {/* Rating */}
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400" />
-                  ))}
-                </div>
-                <span className="text-xs font-bold text-slate-900 dark:text-slate-200">{product.rating}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">({product.reviewsCount} customer reviews)</span>
-              </div>
+              {(() => {
+                const revCount = (product as any).reviews?.length || product.reviewsCount || (product as any).reviewCount || 0;
+                return revCount > 0 ? (
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex text-amber-400">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className={`w-4 h-4 ${i < Math.round(product.rating || 0) ? 'fill-amber-400' : 'text-slate-400 dark:text-slate-700'}`} />
+                      ))}
+                    </div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-200">
+                      {product.rating ? product.rating.toFixed(1) : '0.0'}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">({revCount} customer reviews)</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex text-slate-400 dark:text-slate-700">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-4 h-4 text-slate-400 dark:text-slate-700" />
+                      ))}
+                    </div>
+                    <span>No reviews yet</span>
+                  </div>
+                );
+              })()}
 
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-3 leading-relaxed">
                 {product.description}
@@ -108,12 +124,25 @@ export function ProductSpecsModal({ product, onClose }: { product: Product | nul
                   <span>TECHNICAL SPECIFICATIONS</span>
                 </h4>
                 <div className="bg-slate-100 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 max-h-48 overflow-y-auto space-y-2 scrollbar-thin">
-                  {Object.entries(product.specs).map(([specKey, specVal]) => (
-                    <div key={specKey} className="flex items-start justify-between text-xs py-1 border-b border-slate-200 dark:border-slate-900 last:border-0">
-                      <span className="text-slate-500 dark:text-slate-400 font-medium w-1/3">{specKey}</span>
-                      <span className="text-slate-900 dark:text-slate-100 font-mono font-semibold w-2/3 text-right">{String(specVal)}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const specsMap = (product as any).specifications || product.specs || {};
+                    const entries = Object.entries(specsMap).filter(([k, v]) => k.trim() && v !== undefined && String(v).trim() !== '');
+
+                    if (entries.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono text-center py-2">
+                          No technical specifications provided for this product.
+                        </p>
+                      );
+                    }
+
+                    return entries.map(([specKey, specVal]) => (
+                      <div key={specKey} className="flex items-start justify-between text-xs py-1 border-b border-slate-200 dark:border-slate-900 last:border-0">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium w-1/3">{specKey}</span>
+                        <span className="text-slate-900 dark:text-slate-100 font-mono font-semibold w-2/3 text-right">{String(specVal)}</span>
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             </div>

@@ -136,10 +136,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  // Calculate dynamic average rating
+  // Calculate dynamic average rating and review count
+  const totalReviewsCount = approvedReviews.length > 0 ? approvedReviews.length : (product?.reviewsCount || (product as any)?.reviewCount || 0);
   const dynamicAvgRating = approvedReviews.length > 0
     ? (approvedReviews.reduce((sum, r) => sum + r.rating, 0) / approvedReviews.length).toFixed(1)
-    : (product?.rating || 0).toFixed(1);
+    : (product?.rating && totalReviewsCount > 0 ? product.rating.toFixed(1) : '0.0');
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -387,7 +388,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
               {/* Rating & Reviews counter */}
               <div className="flex items-center gap-3 pt-1">
-                {approvedReviews.length > 0 || (product.rating && product.rating > 0) ? (
+                {totalReviewsCount > 0 ? (
                   <>
                     <div className="flex items-center text-amber-400">
                       {[...Array(5)].map((_, i) => (
@@ -402,11 +403,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     </span>
                     <span className="text-xs text-zinc-500">•</span>
                     <span className="text-xs font-mono text-zinc-400">
-                      {approvedReviews.length || product.reviewsCount} Verified Review(s)
+                      {totalReviewsCount} Verified Review(s)
                     </span>
                   </>
                 ) : (
-                  <span className="text-xs font-mono text-zinc-400">No reviews yet</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center text-zinc-700">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-4 h-4 text-zinc-700" />
+                      ))}
+                    </div>
+                    <span className="text-xs font-mono text-zinc-400">No reviews yet</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -530,30 +538,41 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* Technical Specs Grid Cards */}
-        {product.specs && Object.keys(product.specs).length > 0 && (
-          <div className="space-y-4 pt-8 border-t border-zinc-800">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2 font-mono">
-              <Zap className="w-5 h-5 text-lime-400" />
-              <span>TECHNICAL SPECIFICATIONS</span>
-            </h3>
+        {(() => {
+          const specsMap = (product as any).specifications || product.specs || {};
+          const specEntries = Object.entries(specsMap).filter(([k, v]) => k.trim() && v !== undefined && String(v).trim() !== '');
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(product.specs).map(([key, val]) => (
-                <div
-                  key={key}
-                  className="p-4 rounded-2xl bg-[#0a0c10] border border-zinc-800 text-zinc-200 space-y-1 hover:border-lime-400/40 transition-colors"
-                >
-                  <span className="text-[11px] font-mono text-zinc-400 block uppercase tracking-wider">
-                    {key}
-                  </span>
-                  <p className="text-xs text-white font-semibold leading-normal">
-                    {val}
-                  </p>
+          return (
+            <div className="space-y-4 pt-8 border-t border-zinc-800">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 font-mono">
+                <Zap className="w-5 h-5 text-lime-400" />
+                <span>TECHNICAL SPECIFICATIONS</span>
+              </h3>
+
+              {specEntries.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {specEntries.map(([key, val]) => (
+                    <div
+                      key={key}
+                      className="p-4 rounded-2xl bg-[#0a0c10] border border-zinc-800 text-zinc-200 space-y-1 hover:border-lime-400/40 transition-colors"
+                    >
+                      <span className="text-[11px] font-mono text-zinc-400 block uppercase tracking-wider">
+                        {key}
+                      </span>
+                      <p className="text-xs text-white font-semibold leading-normal">
+                        {String(val)}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <div className="p-6 rounded-2xl bg-[#0a0c10] border border-zinc-800 text-center">
+                  <p className="text-xs font-mono text-zinc-400">No technical specifications provided for this product.</p>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Real Customer Reviews Section */}
         <div className="space-y-6 pt-8 border-t border-zinc-800">

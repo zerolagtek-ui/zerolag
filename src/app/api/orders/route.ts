@@ -36,6 +36,8 @@ export async function POST(request: Request) {
       secondary_phone: body.secondaryPhone || body.secondary_phone || '',
       shipping_address: body.shippingAddress || body.address || '',
       payment_method: body.paymentMethod || body.payment_method || 'bank-transfer',
+      payment_slip_url: body.paymentSlipUrl || body.payment_slip_url || body.bankSlipUrl || '',
+      paymentSlipUrl: body.paymentSlipUrl || body.payment_slip_url || body.bankSlipUrl || '',
       shipping_method: body.shippingMethod || body.shipping_method || 'Trans Express',
       items: body.items || [],
       subtotal: body.subtotalLkr || body.subtotal || 0,

@@ -53,7 +53,7 @@ const ProductSchema = new Schema<IProductDocument>(
     tags: [{ type: String }],
     stock: { type: Number, default: 10 },
     in_stock: { type: Boolean, default: true },
-    rating: { type: Number, default: 5.0 },
+    rating: { type: Number, default: 0 },
     reviews_count: { type: Number, default: 0 },
     featured: { type: Boolean, default: false },
     is_featured: { type: Boolean, default: false },

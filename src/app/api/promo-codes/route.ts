@@ -18,18 +18,7 @@ export interface PromoCodeType {
 }
 
 // In-memory fallback cache when MongoDB is not connected
-const defaultSeedPromo: PromoCodeType = {
-  id: 'promo-zerolag10',
-  code: 'ZEROLAG10',
-  discountType: 'percentage',
-  discountValue: 10,
-  minOrderAmount: 0,
-  isActive: true,
-  usageCount: 0,
-  created_at: new Date().toISOString()
-};
-
-let inMemoryPromos: PromoCodeType[] = [defaultSeedPromo];
+let inMemoryPromos: PromoCodeType[] = [];
 
 // Helper query builder that works with both MongoDB ObjectIds and custom string IDs / code names
 const getQuery = (idOrCode: string) => {
@@ -73,30 +62,10 @@ export async function GET() {
     if (isMongoConfigured()) {
       const conn = await connectToDatabase();
       if (conn) {
-        let docs = await PromoCodeModel.find({}).sort({ created_at: -1 }).lean();
-        
-        // Seed default code ZEROLAG10 if no promo codes exist
-        if (docs.length === 0) {
-          const created = await PromoCodeModel.create({
-            id: 'promo-zerolag10',
-            code: 'ZEROLAG10',
-            discountType: 'percentage',
-            discountValue: 10,
-            minOrderAmount: 0,
-            isActive: true,
-            usageCount: 0
-          });
-          docs = [created.toObject()];
-        }
-        
+        const docs = await PromoCodeModel.find({}).sort({ created_at: -1 }).lean();
         const formatted = docs.map(formatPromoDoc);
         return NextResponse.json({ success: true, promoCodes: formatted });
       }
-    }
-
-    // Fallback to in-memory store
-    if (inMemoryPromos.length === 0) {
-      inMemoryPromos = [defaultSeedPromo];
     }
 
     return NextResponse.json({ success: true, promoCodes: inMemoryPromos });

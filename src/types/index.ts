@@ -98,6 +98,7 @@ export interface OrderDetails {
   courier?: string;
   trackingNumber?: string;
   paymentStatus?: PaymentStatus;
+  paymentSlipUrl?: string;
   orderStatus?: OrderStatus;
   items: CartItem[];
   subtotalLkr: number;

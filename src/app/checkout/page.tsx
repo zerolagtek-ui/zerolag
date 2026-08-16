@@ -9,11 +9,13 @@ import {
   getStoredOrders,
   updateOrderPaymentStatus,
   getStoredShippingRates,
-  syncShippingRatesFromDatabase
+  syncShippingRatesFromDatabase,
+  getStoredBankDetails,
+  syncBankDetailsFromDatabase
 } from '@/lib/storeManager';
 import { preparePayHereForm, submitPayHereForm } from '@/lib/payhere';
-import { OrderDetails, PaymentMethod, ShippingOption } from '@/types';
-import { ShieldCheck, Truck, Lock, ArrowLeft, CheckCircle2, ShoppingBag, AlertCircle, Printer } from 'lucide-react';
+import { OrderDetails, PaymentMethod, ShippingOption, BankAccountDetails } from '@/types';
+import { ShieldCheck, Truck, Lock, ArrowLeft, CheckCircle2, ShoppingBag, AlertCircle, Printer, Building2, Copy, Check, Upload, Loader2, FileText, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function CheckoutPage() {
@@ -22,6 +24,12 @@ export default function CheckoutPage() {
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShippingId, setSelectedShippingId] = useState<string>('trans-express');
   const [paymentError, setPaymentError] = useState('');
+
+  const [bankDetails, setBankDetails] = useState<BankAccountDetails>(getStoredBankDetails());
+  const [copiedAcc, setCopiedAcc] = useState(false);
+  const [paymentSlipUrl, setPaymentSlipUrl] = useState<string>('');
+  const [isUploadingSlip, setIsUploadingSlip] = useState<boolean>(false);
+  const [slipUploadError, setSlipUploadError] = useState<string>('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
@@ -172,6 +180,9 @@ export default function CheckoutPage() {
         }
       }
 
+      const bDetails = await syncBankDetailsFromDatabase();
+      setBankDetails(bDetails);
+
       // 2. Load Shipping Rates
       const cached = getStoredShippingRates();
       const activeCached = cached.filter(s => s.enabled);
@@ -233,9 +244,60 @@ export default function CheckoutPage() {
     if (paymentError) setPaymentError('');
   };
 
+  const handleCopyAcc = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(bankDetails.accountNumber);
+      setCopiedAcc(true);
+      setTimeout(() => setCopiedAcc(false), 2000);
+    }
+  };
+
+  const handleSlipFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setSlipUploadError('File size exceeds the 5MB limit. Please select a smaller receipt file.');
+      return;
+    }
+
+    setIsUploadingSlip(true);
+    setSlipUploadError('');
+    setPaymentError('');
+
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.url) {
+        setPaymentSlipUrl(data.url);
+        setSlipUploadError('');
+      } else {
+        throw new Error(data.error || 'Failed to upload deposit slip.');
+      }
+    } catch (err: unknown) {
+      console.error('Slip upload error:', err);
+      const msg = err instanceof Error ? err.message : 'Slip upload failed. Please try again.';
+      setSlipUploadError(msg);
+    } finally {
+      setIsUploadingSlip(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
+
+    if (formData.paymentMethod === 'bank-transfer' && !paymentSlipUrl) {
+      setPaymentError('Please upload your bank deposit/transfer slip before placing the order.');
+      return;
+    }
 
     setIsSubmitting(true);
     setPaymentError('');
@@ -255,6 +317,7 @@ export default function CheckoutPage() {
       shippingMethod: activeShipping.name,
       shippingFee: shippingFee,
       paymentStatus: formData.paymentMethod === 'cod' || formData.paymentMethod === 'bank-transfer' ? ('Pending' as const) : ('Paid' as const),
+      paymentSlipUrl: formData.paymentMethod === 'bank-transfer' ? paymentSlipUrl : undefined,
       orderStatus: 'Pending' as const,
       items: cart,
       subtotalLkr: subtotal,
@@ -272,6 +335,7 @@ export default function CheckoutPage() {
       secondaryPhone: formData.secondaryPhone || '',
       shippingAddress: `${formData.address}, ${formData.city}, ${formData.postalCode}`,
       paymentMethod: formData.paymentMethod,
+      paymentSlipUrl: formData.paymentMethod === 'bank-transfer' ? paymentSlipUrl : undefined,
       shippingMethod: activeShipping.name,
       items: cart.map(item => ({
         name: item.product.name,
@@ -297,23 +361,27 @@ export default function CheckoutPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            order_id: generatedOrderId,
             amount: totalAmount,
+            totalAmount: totalAmount,
             freight: shippingFee,
+            shippingFee: shippingFee,
+            order_id: generatedOrderId,
+            orderId: generatedOrderId,
             first_name: formData.firstName || 'Customer',
             last_name: formData.lastName || '',
             phone: formData.phone,
             email: formData.email,
             address: formData.address,
             city: formData.city,
-            response_url: `${originUrl}/checkout?order_id=${generatedOrderId}`
+            response_url: `${originUrl}/api/payzy/verify`
           })
         });
 
         const payzyData = await payzyRes.json();
-        if (payzyRes.ok && payzyData.success && payzyData.redirectUrl) {
+        const targetUrl = payzyData.redirect_url || payzyData.url || payzyData?.data?.url || payzyData?.data?.redirect_url;
+        if (payzyRes.ok && payzyData.success && targetUrl) {
           clearCart();
-          window.location.href = payzyData.redirectUrl;
+          window.location.href = targetUrl;
           return;
         } else {
           const errMsg = payzyData.message || (payzyData.error?.message ? payzyData.error.message : (typeof payzyData.error === 'string' ? payzyData.error : 'Payzy payment initialization failed.'));
@@ -739,6 +807,97 @@ export default function CheckoutPage() {
                       <span className="text-[10px]">Pay Cash to Courier</span>
                     </label>
                   </div>
+
+                  {/* Bank Details & Mandatory Slip Upload Component */}
+                  {formData.paymentMethod === 'bank-transfer' && (
+                    <div className="mt-4 p-4 rounded-2xl bg-lime-950/30 border border-lime-500/30 space-y-3 font-mono text-xs">
+                      <div className="flex items-center justify-between text-lime-300 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <Building2 className="w-4 h-4 text-lime-400" />
+                          <span>{bankDetails.bankName}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleCopyAcc}
+                          className="px-2.5 py-1 rounded-lg bg-lime-500/20 text-lime-300 hover:bg-lime-500/30 font-mono text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          {copiedAcc ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedAcc ? 'Copied!' : 'Copy Acc #'}</span>
+                        </button>
+                      </div>
+                      <p className="text-zinc-300 text-[11px]">Account Name: <strong className="text-white">{bankDetails.accountName}</strong></p>
+                      <p className="text-zinc-300 text-[11px]">Account Number: <strong className="text-lime-400 font-bold">{bankDetails.accountNumber}</strong></p>
+                      <p className="text-zinc-400 text-[10px]">{bankDetails.branch}</p>
+
+                      {/* Mandatory Bank Slip Upload */}
+                      <div className="pt-3 border-t border-lime-500/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-lime-400 font-bold text-xs flex items-center gap-1.5">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload Bank Transfer Receipt / Slip *</span>
+                          </label>
+                          <span className="text-[10px] text-zinc-400">Max 5MB (JPG, PNG, PDF)</span>
+                        </div>
+
+                        {!paymentSlipUrl ? (
+                          <div className="relative border-2 border-dashed border-zinc-700 hover:border-lime-400 rounded-xl p-4 bg-zinc-950/80 text-center transition-all cursor-pointer">
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,application/pdf"
+                              onChange={handleSlipFileUpload}
+                              disabled={isUploadingSlip}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
+                            />
+                            {isUploadingSlip ? (
+                              <div className="py-2 flex flex-col items-center gap-1 text-lime-400">
+                                <Loader2 className="w-6 h-6 animate-spin" />
+                                <span className="text-[11px] font-bold">Uploading deposit slip...</span>
+                              </div>
+                            ) : (
+                              <div className="py-2 flex flex-col items-center gap-1 text-zinc-400">
+                                <Upload className="w-5 h-5 text-lime-400" />
+                                <p className="text-xs text-white font-bold">Click or drag bank deposit slip here *</p>
+                                <span className="text-[10px] text-zinc-500">Supports JPG, PNG, WEBP, or PDF up to 5MB</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-xl bg-zinc-950 border border-lime-500/40 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 truncate">
+                              {paymentSlipUrl.startsWith('data:application/pdf') || paymentSlipUrl.endsWith('.pdf') ? (
+                                <FileText className="w-6 h-6 text-lime-400 shrink-0" />
+                              ) : (
+                                <img src={paymentSlipUrl} alt="Deposit Slip Preview" className="w-10 h-10 rounded-lg object-cover border border-zinc-800 shrink-0" />
+                              )}
+                              <div className="truncate">
+                                <span className="text-xs font-bold text-lime-400 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Deposit Slip Uploaded
+                                </span>
+                                <a href={paymentSlipUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-zinc-400 hover:text-white underline truncate block">
+                                  Click to view full slip
+                                </a>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPaymentSlipUrl('')}
+                              className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors shrink-0"
+                              title="Remove slip"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+
+                        {slipUploadError && (
+                          <div className="p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px] flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>{slipUploadError}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
               </div>

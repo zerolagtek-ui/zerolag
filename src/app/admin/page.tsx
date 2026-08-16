@@ -217,8 +217,8 @@ export default function AdminPage() {
     badge: 'NEW',
     warranty: '1 Year Warranty',
     description: 'High performance tech gear.',
-    specKeys: ['Sensor', 'Connectivity', 'Weight'],
-    specVals: ['32,000 DPI Optical', '2.4GHz Wireless', '60 grams']
+    specKeys: [],
+    specVals: []
   });
 
   // Hero Slide Modal State (Create & Edit)
@@ -616,8 +616,8 @@ export default function AdminPage() {
       badge: 'NEW',
       warranty: '1 Year Warranty',
       description: 'High performance tech hardware.',
-      specKeys: ['Sensor', 'Weight'],
-      specVals: ['Optical Sensor', '65g']
+      specKeys: [],
+      specVals: []
     });
     setIsProductModalOpen(true);
   };
@@ -645,8 +645,8 @@ export default function AdminPage() {
       badge: product.badge || '',
       warranty: product.warranty || '1 Year Warranty',
       description: product.description,
-      specKeys: keys.length > 0 ? keys : ['Feature'],
-      specVals: vals.length > 0 ? vals : ['Standard']
+      specKeys: keys,
+      specVals: vals
     });
     setIsProductModalOpen(true);
   };
@@ -737,8 +737,8 @@ export default function AdminPage() {
         priceUsd: priceUsd,
         originalPriceLkr: originalPriceValue > 0 ? originalPriceValue : undefined,
         originalPrice: originalPriceValue > 0 ? originalPriceValue : undefined,
-        rating: 5.0,
-        reviewsCount: 1,
+        rating: 0,
+        reviewsCount: 0,
         image: imageUrl,
         galleryImages,
         specs: specsObj,
@@ -1658,8 +1658,8 @@ export default function AdminPage() {
                         </div>
                       </td>
 
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold border ${
+                      <td className="p-4 space-y-1">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold border inline-block ${
                           order.paymentMethod === 'bank-transfer'
                             ? 'bg-lime-500/10 text-lime-400 border-lime-400/50'
                             : order.paymentMethod === 'payhere'
@@ -1670,6 +1670,20 @@ export default function AdminPage() {
                         }`}>
                           {order.paymentMethod}
                         </span>
+                        {(() => {
+                          const slip = order.paymentSlipUrl || (order as any).payment_slip_url || (order as any).bankSlipUrl;
+                          if (!slip) return null;
+                          return (
+                            <a
+                              href={slip}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 rounded-lg bg-lime-400/10 border border-lime-400/30 text-lime-400 hover:bg-lime-400/20 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer w-max block mt-1"
+                            >
+                              <span>📄 View Bank Slip</span>
+                            </a>
+                          );
+                        })()}
                       </td>
 
                       <td className="p-4 font-bold text-lime-400 text-sm">
@@ -2602,6 +2616,75 @@ export default function AdminPage() {
                     )}
                   </div>
                 ))}
+              </div>
+
+              {/* Dynamic Technical Specifications Builder */}
+              <div className="space-y-3 pt-3 border-t border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-zinc-300 block font-bold text-xs">TECHNICAL SPECIFICATIONS</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductForm(prev => ({
+                        ...prev,
+                        specKeys: [...prev.specKeys, ''],
+                        specVals: [...prev.specVals, '']
+                      }));
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-lime-400/10 hover:bg-lime-400/20 text-lime-400 border border-lime-400/30 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Spec Row</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-500 font-mono">Add custom specification key-value pairs (e.g., Key: &quot;Sensor&quot;, Value: &quot;PixArt 3395&quot;).</p>
+
+                {productForm.specKeys.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-zinc-500 text-center text-[11px]">
+                    No specifications added. Click &quot;+ Add Spec Row&quot; to define specifications for this product.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {productForm.specKeys.map((key, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Key (e.g. Sensor)"
+                          value={key}
+                          onChange={(e) => {
+                            const newKeys = [...productForm.specKeys];
+                            newKeys[idx] = e.target.value;
+                            setProductForm({ ...productForm, specKeys: newKeys });
+                          }}
+                          className="w-1/3 bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white focus:border-lime-400 focus:outline-none text-xs font-mono"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value (e.g. PixArt 3395)"
+                          value={productForm.specVals[idx] || ''}
+                          onChange={(e) => {
+                            const newVals = [...productForm.specVals];
+                            newVals[idx] = e.target.value;
+                            setProductForm({ ...productForm, specVals: newVals });
+                          }}
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white focus:border-lime-400 focus:outline-none text-xs font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newKeys = productForm.specKeys.filter((_, i) => i !== idx);
+                            const newVals = productForm.specVals.filter((_, i) => i !== idx);
+                            setProductForm({ ...productForm, specKeys: newKeys, specVals: newVals });
+                          }}
+                          className="p-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors shrink-0"
+                          title="Delete Row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>

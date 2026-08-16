@@ -8,6 +8,8 @@ export interface IOrderDocument extends Document {
   secondary_phone?: string;
   shipping_address: string;
   payment_method: string;
+  payment_slip_url?: string;
+  paymentSlipUrl?: string;
   shipping_method?: string;
   courier?: string;
   tracking_number?: string;
@@ -28,6 +30,8 @@ const OrderSchema = new Schema<IOrderDocument>(
     secondary_phone: { type: String },
     shipping_address: { type: String, required: true },
     payment_method: { type: String, required: true },
+    payment_slip_url: { type: String },
+    paymentSlipUrl: { type: String },
     shipping_method: { type: String, default: 'Trans Express' },
     courier: { type: String },
     tracking_number: { type: String },

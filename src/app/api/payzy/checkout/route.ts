@@ -1,64 +1,53 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const secretKey = process.env.PAYZY_SECRET_KEY;
-    const shopId = process.env.NEXT_PUBLIC_PAYZY_SHOP_ID;
-    const testMode = process.env.NEXT_PUBLIC_PAYZY_TEST_MODE || 'on';
+    console.log('--- [PAYZY INCOMING BODY] ---', body);
 
-    if (!secretKey || !shopId) {
+    const x_shopid = String(process.env.NEXT_PUBLIC_PAYZY_SHOP_ID || process.env.PAYZY_SHOP_ID || '2').trim();
+    const secretKey = String(process.env.PAYZY_SECRET_KEY || process.env.PAYZY_APP_SECRET || '').trim();
+    const rawTest = (process.env.NEXT_PUBLIC_PAYZY_TEST_MODE || 'on').trim();
+    const x_test_mode = rawTest.toLowerCase() === 'off' ? 'off' : 'on';
+    const x_version = '1.0';
+    const x_platform = 'custom';
+
+    if (!secretKey) {
       return NextResponse.json(
-        { error: 'PAYZY_NOT_CONFIGURED', message: 'Payzy Shop ID or Secret Key missing.' },
-        { status: 400 }
+        { success: false, error: 'MISSING_SECRET_KEY', message: 'PAYZY_SECRET_KEY is missing in environment variables.' },
+        { status: 500 }
       );
     }
 
-    const {
-      order_id,
-      amount,
-      freight,
-      first_name,
-      last_name,
-      phone,
-      email,
-      address,
-      city,
-      state = 'Western',
-      zip = '00100',
-      country = 'Sri Lanka',
-      company = 'ZeroLag Tek',
-      response_url
-    } = body;
-
-    const parsedAmount = Math.max(0, Number(amount) || 0);
-    const parsedFreight = Math.max(0, Number(freight) || 0);
-
-    if (parsedAmount <= 0) {
-      return NextResponse.json(
-        { success: false, error: 'INVALID_AMOUNT', message: 'Order amount must be greater than 0.' },
-        { status: 400 }
-      );
-    }
+    const rawAmount = body.amount ?? body.totalAmount ?? body.finalPayable ?? body.total;
+    const rawFreight = body.freight ?? body.shippingFee ?? body.deliveryFee ?? 0;
+    
+    const parsedAmount = Math.max(1, Number(rawAmount) || 0);
+    const parsedFreight = Math.max(0, Number(rawFreight) || 0);
 
     const x_amount = parsedAmount.toFixed(2);
     const x_freight = parsedFreight.toFixed(2);
-    const x_test_mode = process.env.NEXT_PUBLIC_PAYZY_TEST_MODE || 'on';
-    const x_shopid = String(process.env.NEXT_PUBLIC_PAYZY_SHOP_ID || '').trim();
-    const x_order_id = String(order_id || `ZLAG-${Date.now()}`).trim();
+    const x_order_id = String(body.order_id || body.orderId || `ZLAG-${Date.now()}`).trim();
 
-    const x_response_url = String(response_url || `${req.nextUrl.origin}/checkout?order_id=${x_order_id}`).trim();
-    const x_first_name = String(first_name || 'Customer').trim();
-    const x_last_name = String(last_name || '').trim();
-    const x_company = String(company || 'ZeroLag Tek').trim();
-    const x_address = String(address || 'N/A').trim();
-    const x_country = String(country || 'Sri Lanka').trim();
-    const x_state = String(state || 'Western').trim();
-    const x_city = String(city || 'Colombo').trim();
-    const x_zip = String(zip || '00100').trim();
-    const x_phone = String(phone || '').trim();
-    const x_email = String(email || '').trim();
+    // 1. Force public live HTTPS response URL (NEVER localhost / 127.0.0.1)
+    let publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerolagtek.app';
+    if (publicBaseUrl.includes('localhost') || publicBaseUrl.includes('127.0.0.1')) {
+      publicBaseUrl = 'https://zerolagtek.app';
+    }
+    const x_response_url = `${publicBaseUrl}/api/payzy/verify`;
+
+    const x_first_name = String(body.first_name || 'Customer').trim();
+    const x_last_name = String(body.last_name || 'Valued').trim();
+    const x_company = String(body.company || 'ZeroLag Tek').trim();
+    const x_address = String(body.address || 'Colombo').trim();
+    const x_country = 'Sri Lanka';
+    const x_state = String(body.state || 'Western').trim();
+    const x_city = String(body.city || 'Colombo').trim();
+    const x_zip = String(body.zip || '00100').trim();
+    const x_phone = String(body.phone || '0771234567').trim();
+    const x_email = String(body.email || 'customer@zerolagtek.app').trim();
+
     const x_ship_to_first_name = x_first_name;
     const x_ship_to_last_name = x_last_name;
     const x_ship_to_company = x_company;
@@ -68,91 +57,100 @@ export async function POST(req: NextRequest) {
     const x_ship_to_city = x_city;
     const x_ship_to_zip = x_zip;
 
-    const signed_field_names =
-      'x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names';
+    // Build Candidate Variations:
+    const candidateVariants = [
+      // Variant 1: Official Step 03 Format (x_version 2nd, signed_field_names at end)
+      {
+        signed_fields: 'x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names',
+        list: `x_test_mode=${x_test_mode},x_version=${x_version},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},x_first_name=${x_first_name},x_last_name=${x_last_name},x_company=${x_company},x_address=${x_address},x_country=${x_country},x_state=${x_state},x_city=${x_city},x_zip=${x_zip},x_phone=${x_phone},x_email=${x_email},x_ship_to_first_name=${x_ship_to_first_name},x_ship_to_last_name=${x_ship_to_last_name},x_ship_to_company=${x_ship_to_company},x_ship_to_address=${x_ship_to_address},x_ship_to_country=${x_ship_to_country},x_ship_to_state=${x_ship_to_state},x_ship_to_city=${x_ship_to_city},x_ship_to_zip=${x_ship_to_zip},x_freight=${x_freight},x_platform=${x_platform},signed_field_names=x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names`
+      },
+      // Variant 2: Step 01 Format (x_platform then x_version=1.0)
+      {
+        signed_fields: 'x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names',
+        list: `x_test_mode=${x_test_mode},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},x_first_name=${x_first_name},x_last_name=${x_last_name},x_company=${x_company},x_address=${x_address},x_country=${x_country},x_state=${x_state},x_city=${x_city},x_zip=${x_zip},x_phone=${x_phone},x_email=${x_email},x_ship_to_first_name=${x_ship_to_first_name},x_ship_to_last_name=${x_ship_to_last_name},x_ship_to_company=${x_ship_to_company},x_ship_to_address=${x_ship_to_address},x_ship_to_country=${x_ship_to_country},x_ship_to_state=${x_ship_to_state},x_ship_to_city=${x_ship_to_city},x_ship_to_zip=${x_ship_to_zip},x_freight=${x_freight},x_platform=${x_platform},x_version=${x_version},signed_field_names=x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names`
+      }
+    ];
 
-    const list =
-      `x_test_mode=${x_test_mode},` +
-      `x_shopid=${x_shopid},` +
-      `x_amount=${x_amount},` +
-      `x_order_id=${x_order_id},` +
-      `x_response_url=${x_response_url},` +
-      `x_first_name=${x_first_name},` +
-      `x_last_name=${x_last_name},` +
-      `x_company=${x_company},` +
-      `x_address=${x_address},` +
-      `x_country=${x_country},` +
-      `x_state=${x_state},` +
-      `x_city=${x_city},` +
-      `x_zip=${x_zip},` +
-      `x_phone=${x_phone},` +
-      `x_email=${x_email},` +
-      `x_ship_to_first_name=${x_ship_to_first_name},` +
-      `x_ship_to_last_name=${x_ship_to_last_name},` +
-      `x_ship_to_company=${x_ship_to_company},` +
-      `x_ship_to_address=${x_ship_to_address},` +
-      `x_ship_to_country=${x_ship_to_country},` +
-      `x_ship_to_state=${x_ship_to_state},` +
-      `x_ship_to_city=${x_ship_to_city},` +
-      `x_ship_to_zip=${x_ship_to_zip},` +
-      `x_freight=${x_freight},` +
-      `x_platform=custom,` +
-      `x_version=1.0,` +
-      `signed_field_names=${signed_field_names}`;
+    const payzyApiUrl = process.env.PAYZY_API_URL || 'https://api.payzypay.xyz/checkout/custom-checkout';
+    let finalRedirectUrl = '';
+    let lastResponseData: unknown = null;
 
-    const signature = crypto
-      .createHmac('sha256', secretKey)
-      .update(list)
-      .digest('base64');
+    for (let i = 0; i < candidateVariants.length; i++) {
+      const variant = candidateVariants[i];
+      const signature = crypto.createHmac('sha256', secretKey).update(variant.list).digest('base64');
 
-    const payload = {
-      x_test_mode,
-      x_version: '1.0',
-      x_shopid,
-      x_amount,
-      amount: parsedAmount,
-      x_freight,
-      freight: parsedFreight,
-      x_order_id,
-      order_id: x_order_id,
-      x_response_url,
-      x_first_name,
-      x_last_name,
-      x_company,
-      x_address,
-      x_country,
-      x_state,
-      x_city,
-      x_zip,
-      x_phone,
-      x_email,
-      x_ship_to_first_name,
-      x_ship_to_last_name,
-      x_ship_to_company,
-      x_ship_to_address,
-      x_ship_to_country,
-      x_ship_to_state,
-      x_ship_to_city,
-      x_ship_to_zip,
-      x_platform: 'custom',
-      signed_field_names,
-      signature
-    };
+      const payzyPayload = {
+        x_test_mode,
+        x_version,
+        x_shopid,
+        x_amount,
+        x_order_id,
+        x_response_url,
+        x_first_name,
+        x_last_name,
+        x_company,
+        x_address,
+        x_country,
+        x_state,
+        x_city,
+        x_zip,
+        x_phone,
+        x_email,
+        x_ship_to_first_name,
+        x_ship_to_last_name,
+        x_ship_to_company,
+        x_ship_to_address,
+        x_ship_to_country,
+        x_ship_to_state,
+        x_ship_to_city,
+        x_ship_to_zip,
+        x_freight,
+        x_platform,
+        signed_field_names: variant.signed_fields,
+        signature,
+        x_signature: signature
+      };
 
-    const payzyRes = await fetch('https://api.payzypay.xyz/checkout/custom-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+      console.log(`[PAYZY ATTEMPT ${i + 1}] Target URL:`, payzyApiUrl);
+      console.log(`[PAYZY ATTEMPT ${i + 1}] Response URL:`, x_response_url);
+      console.log(`[PAYZY ATTEMPT ${i + 1}] List:`, variant.list);
+      console.log(`[PAYZY ATTEMPT ${i + 1}] Sig:`, signature);
 
-    const result = await payzyRes.json();
-    if (result?.data?.url || result?.url) {
-      return NextResponse.json({ success: true, redirectUrl: result?.data?.url || result?.url });
+      const payzyRes = await fetch(payzyApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payzyPayload)
+      });
+
+      const data = await payzyRes.json().catch(() => ({}));
+      console.log(`[PAYZY ATTEMPT ${i + 1} RES]:`, data);
+
+      const url = data?.data?.url || data?.url;
+      lastResponseData = data;
+
+      if (url && !url.includes('/fromwordpress/e1')) {
+        finalRedirectUrl = url;
+        console.log(`✓ PAYZY SIGNATURE MATCHED ON VARIANT ${i + 1}! Redirecting to:`, finalRedirectUrl);
+        break;
+      }
     }
 
-    return NextResponse.json({ success: false, error: result }, { status: 400 });
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error during Payzy checkout';
-    return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+    if (!finalRedirectUrl) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'PAYZY_REJECTED', 
+          message: 'Payzy rejected the payment request. Please ensure PAYZY_SECRET_KEY and SHOP_ID in .env match your Payzy Portal.',
+          data: lastResponseData
+        },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ success: true, redirect_url: finalRedirectUrl, url: finalRedirectUrl });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown Payzy checkout exception';
+    console.error('Payzy checkout exception:', error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
