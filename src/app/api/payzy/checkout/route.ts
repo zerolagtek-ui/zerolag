@@ -8,8 +8,6 @@ export async function POST(req: Request) {
 
     const x_shopid = String(process.env.NEXT_PUBLIC_PAYZY_SHOP_ID || process.env.PAYZY_SHOP_ID || '2').trim();
     const secretKey = String(process.env.PAYZY_SECRET_KEY || process.env.PAYZY_APP_SECRET || '').trim();
-    const rawTest = (process.env.NEXT_PUBLIC_PAYZY_TEST_MODE || 'on').trim();
-    const x_test_mode = rawTest.toLowerCase() === 'off' ? 'off' : 'on';
     const x_version = '1.0';
     const x_platform = 'custom';
 
@@ -29,13 +27,9 @@ export async function POST(req: Request) {
     const x_amount = parsedAmount.toFixed(2);
     const x_freight = parsedFreight.toFixed(2);
     const x_order_id = String(body.order_id || body.orderId || `ZLAG-${Date.now()}`).trim();
-
-    // 1. Force public live HTTPS response URL (NEVER localhost / 127.0.0.1)
-    let publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerolagtek.app';
-    if (publicBaseUrl.includes('localhost') || publicBaseUrl.includes('127.0.0.1')) {
-      publicBaseUrl = 'https://zerolagtek.app';
-    }
-    const x_response_url = `${publicBaseUrl}/api/payzy/verify`;
+    
+    // Always live domain for response_url
+    const x_response_url = 'https://zerolagtek.app/api/payzy/verify';
 
     const x_first_name = String(body.first_name || 'Customer').trim();
     const x_last_name = String(body.last_name || 'Valued').trim();
@@ -57,30 +51,69 @@ export async function POST(req: Request) {
     const x_ship_to_city = x_city;
     const x_ship_to_zip = x_zip;
 
-    // Build Candidate Variations:
-    const candidateVariants = [
-      // Variant 1: Official Step 03 Format (x_version 2nd, signed_field_names at end)
-      {
-        signed_fields: 'x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names',
-        list: `x_test_mode=${x_test_mode},x_version=${x_version},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},x_first_name=${x_first_name},x_last_name=${x_last_name},x_company=${x_company},x_address=${x_address},x_country=${x_country},x_state=${x_state},x_city=${x_city},x_zip=${x_zip},x_phone=${x_phone},x_email=${x_email},x_ship_to_first_name=${x_ship_to_first_name},x_ship_to_last_name=${x_ship_to_last_name},x_ship_to_company=${x_ship_to_company},x_ship_to_address=${x_ship_to_address},x_ship_to_country=${x_ship_to_country},x_ship_to_state=${x_ship_to_state},x_ship_to_city=${x_ship_to_city},x_ship_to_zip=${x_ship_to_zip},x_freight=${x_freight},x_platform=${x_platform},signed_field_names=x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names`
-      },
-      // Variant 2: Step 01 Format (x_platform then x_version=1.0)
-      {
-        signed_fields: 'x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names',
-        list: `x_test_mode=${x_test_mode},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},x_first_name=${x_first_name},x_last_name=${x_last_name},x_company=${x_company},x_address=${x_address},x_country=${x_country},x_state=${x_state},x_city=${x_city},x_zip=${x_zip},x_phone=${x_phone},x_email=${x_email},x_ship_to_first_name=${x_ship_to_first_name},x_ship_to_last_name=${x_ship_to_last_name},x_ship_to_company=${x_ship_to_company},x_ship_to_address=${x_ship_to_address},x_ship_to_country=${x_ship_to_country},x_ship_to_state=${x_ship_to_state},x_ship_to_city=${x_ship_to_city},x_ship_to_zip=${x_ship_to_zip},x_freight=${x_freight},x_platform=${x_platform},x_version=${x_version},signed_field_names=x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names`
-      }
-    ];
+    // Common shared fields string
+    const commonFields = 
+      `x_first_name=${x_first_name},` +
+      `x_last_name=${x_last_name},` +
+      `x_company=${x_company},` +
+      `x_address=${x_address},` +
+      `x_country=${x_country},` +
+      `x_state=${x_state},` +
+      `x_city=${x_city},` +
+      `x_zip=${x_zip},` +
+      `x_phone=${x_phone},` +
+      `x_email=${x_email},` +
+      `x_ship_to_first_name=${x_ship_to_first_name},` +
+      `x_ship_to_last_name=${x_ship_to_last_name},` +
+      `x_ship_to_company=${x_ship_to_company},` +
+      `x_ship_to_address=${x_ship_to_address},` +
+      `x_ship_to_country=${x_ship_to_country},` +
+      `x_ship_to_state=${x_ship_to_state},` +
+      `x_ship_to_city=${x_ship_to_city},` +
+      `x_ship_to_zip=${x_ship_to_zip},` +
+      `x_freight=${x_freight}`;
 
-    const payzyApiUrl = process.env.PAYZY_API_URL || 'https://api.payzypay.xyz/checkout/custom-checkout';
+    // Test combinations: test_mode ("on" vs "On"), exact doc typo vs standard, and Base64 vs Hex
+    const testModes = ['on', 'On', 'off', 'Off'];
     let finalRedirectUrl = '';
     let lastResponseData: unknown = null;
 
-    for (let i = 0; i < candidateVariants.length; i++) {
-      const variant = candidateVariants[i];
-      const signature = crypto.createHmac('sha256', secretKey).update(variant.list).digest('base64');
+    const variants: { name: string; list: string; signed_fields: string; test_mode: string }[] = [];
+
+    for (const tm of testModes) {
+      // V1: Exact Step 01 JavaScript sample in Docs (with `,x_version1.0`)
+      variants.push({
+        name: `Doc Exact Typo (mode: ${tm})`,
+        test_mode: tm,
+        signed_fields: 'x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names',
+        list: `x_test_mode=${tm},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},${commonFields},x_platform=${x_platform},x_version${x_version},signed_field_names=x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names`
+      });
+
+      // V2: Standard Step 01 (with `,x_version=1.0`)
+      variants.push({
+        name: `Standard Step 01 (mode: ${tm})`,
+        test_mode: tm,
+        signed_fields: 'x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names',
+        list: `x_test_mode=${tm},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},${commonFields},x_platform=${x_platform},x_version=${x_version},signed_field_names=x_test_mode,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,x_version,signed_field_names`
+      });
+
+      // V3: JSON Schema Step 03 (x_version 2nd)
+      variants.push({
+        name: `Schema Step 03 (mode: ${tm})`,
+        test_mode: tm,
+        signed_fields: 'x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names',
+        list: `x_test_mode=${tm},x_version=${x_version},x_shopid=${x_shopid},x_amount=${x_amount},x_order_id=${x_order_id},x_response_url=${x_response_url},${commonFields},x_platform=${x_platform},signed_field_names=x_test_mode,x_version,x_shopid,x_amount,x_order_id,x_response_url,x_first_name,x_last_name,x_company,x_address,x_country,x_state,x_city,x_zip,x_phone,x_email,x_ship_to_first_name,x_ship_to_last_name,x_ship_to_company,x_ship_to_address,x_ship_to_country,x_ship_to_state,x_ship_to_city,x_ship_to_zip,x_freight,x_platform,signed_field_names`
+      });
+    }
+
+    const payzyApiUrl = process.env.PAYZY_API_URL || 'https://api.payzypay.xyz/checkout/custom-checkout';
+
+    for (let i = 0; i < variants.length; i++) {
+      const v = variants[i];
+      const sigBase64 = crypto.createHmac('sha256', secretKey).update(v.list).digest('base64');
 
       const payzyPayload = {
-        x_test_mode,
+        x_test_mode: v.test_mode,
         x_version,
         x_shopid,
         x_amount,
@@ -106,15 +139,10 @@ export async function POST(req: Request) {
         x_ship_to_zip,
         x_freight,
         x_platform,
-        signed_field_names: variant.signed_fields,
-        signature,
-        x_signature: signature
+        signed_field_names: v.signed_fields,
+        signature: sigBase64,
+        x_signature: sigBase64
       };
-
-      console.log(`[PAYZY ATTEMPT ${i + 1}] Target URL:`, payzyApiUrl);
-      console.log(`[PAYZY ATTEMPT ${i + 1}] Response URL:`, x_response_url);
-      console.log(`[PAYZY ATTEMPT ${i + 1}] List:`, variant.list);
-      console.log(`[PAYZY ATTEMPT ${i + 1}] Sig:`, signature);
 
       const payzyRes = await fetch(payzyApiUrl, {
         method: 'POST',
@@ -123,14 +151,15 @@ export async function POST(req: Request) {
       });
 
       const data = await payzyRes.json().catch(() => ({}));
-      console.log(`[PAYZY ATTEMPT ${i + 1} RES]:`, data);
-
       const url = data?.data?.url || data?.url;
       lastResponseData = data;
 
       if (url && !url.includes('/fromwordpress/e1')) {
         finalRedirectUrl = url;
-        console.log(`✓ PAYZY SIGNATURE MATCHED ON VARIANT ${i + 1}! Redirecting to:`, finalRedirectUrl);
+        console.log(`\n========================================`);
+        console.log(`🎯 PAYZY HASH ACCEPTED ON: [${v.name}]`);
+        console.log(`🎯 REDIRECT URL:`, finalRedirectUrl);
+        console.log(`========================================\n`);
         break;
       }
     }
@@ -140,7 +169,7 @@ export async function POST(req: Request) {
         { 
           success: false, 
           error: 'PAYZY_REJECTED', 
-          message: 'Payzy rejected the payment request. Please ensure PAYZY_SECRET_KEY and SHOP_ID in .env match your Payzy Portal.',
+          message: 'All signature permutations were rejected. Please verify PAYZY_SECRET_KEY and SHOP_ID.',
           data: lastResponseData
         },
         { status: 400 }
