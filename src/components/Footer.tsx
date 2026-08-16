@@ -181,12 +181,12 @@ export function Footer() {
         {/* Bottom Rights Strip */}
         <div className="mt-12 pt-6 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between text-xs font-mono gap-4">
           <p>© 2026 ZeroLag Tek Store. All rights reserved.</p>
-          <div className="flex items-center gap-4 text-[11px] text-zinc-400">
-            <Link href="/return-policy" className="hover:text-lime-400 transition-colors">Return & Refund Policy</Link>
-            <span>•</span>
-            <Link href="/privacy-policy" className="hover:text-lime-400 transition-colors">Privacy Policy</Link>
-            <span>•</span>
-            <Link href="/terms" className="hover:text-lime-400 transition-colors">Terms & Conditions</Link>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-6 text-xs text-zinc-400">
+            <Link className="hover:text-lime-400 transition-colors" href="/return-policy">Return & Refund Policy</Link>
+            <span className="hidden sm:inline text-zinc-700">•</span>
+            <Link className="hover:text-lime-400 transition-colors" href="/privacy-policy">Privacy Policy</Link>
+            <span className="hidden sm:inline text-zinc-700">•</span>
+            <Link className="hover:text-lime-400 transition-colors" href="/terms">Terms & Conditions</Link>
           </div>
         </div>
 

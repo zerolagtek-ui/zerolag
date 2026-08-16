@@ -219,15 +219,36 @@ export function addStoredOrder(order: OrderDetails): OrderDetails[] {
   return updated;
 }
 
-export function updateOrderStatus(orderId: string, status: OrderDetails['orderStatus']): OrderDetails[] {
+export function updateOrderStatus(
+  orderId: string,
+  status: OrderDetails['orderStatus'],
+  courier?: string,
+  trackingNumber?: string
+): OrderDetails[] {
   const orders = getStoredOrders();
   const updated = orders.map(o => {
     if (o.id === orderId) {
-      return {
+      const updatedOrder: OrderDetails = {
         ...o,
         orderStatus: status,
-        paymentStatus: status === 'Completed' ? ('Paid' as const) : o.paymentStatus
+        paymentStatus: status === 'Completed' ? ('Paid' as const) : o.paymentStatus,
+        courier: courier !== undefined ? courier : o.courier,
+        trackingNumber: trackingNumber !== undefined ? trackingNumber : o.trackingNumber
       };
+
+      fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: orderId,
+          status,
+          paymentStatus: updatedOrder.paymentStatus,
+          courier: updatedOrder.courier,
+          trackingNumber: updatedOrder.trackingNumber
+        })
+      }).catch(() => {});
+
+      return updatedOrder;
     }
     return o;
   });

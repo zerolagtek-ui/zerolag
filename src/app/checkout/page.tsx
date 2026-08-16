@@ -58,6 +58,31 @@ export default function CheckoutPage() {
               matchedOrder.paymentStatus = 'Paid';
               updateOrderPaymentStatus(xOrderId, 'Paid');
               setConfirmedOrderDetails(matchedOrder);
+
+              fetch('/api/send-order-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  orderId: matchedOrder.id,
+                  customerName: matchedOrder.customerName,
+                  customerEmail: matchedOrder.email,
+                  customerPhone: matchedOrder.phone,
+                  secondaryPhone: matchedOrder.secondaryPhone || '',
+                  shippingAddress: `${matchedOrder.address}, ${matchedOrder.city}, ${matchedOrder.postalCode}`,
+                  paymentMethod: matchedOrder.paymentMethod,
+                  shippingMethod: matchedOrder.shippingMethod,
+                  items: matchedOrder.items.map(item => ({
+                    name: item.product.name,
+                    quantity: item.quantity,
+                    price: item.product.priceLkr,
+                    total: item.product.priceLkr * item.quantity,
+                  })),
+                  subtotal: matchedOrder.subtotalLkr,
+                  shippingFee: matchedOrder.shippingLkr,
+                  totalAmount: matchedOrder.totalLkr,
+                  orderDate: matchedOrder.createdAt,
+                }),
+              }).catch(err => console.error('Email dispatch error:', err));
             }
 
             setOrderConfirmed(true);
@@ -111,6 +136,31 @@ export default function CheckoutPage() {
             matchedOrder.paymentStatus = 'Paid';
             updateOrderPaymentStatus(xOrderId, 'Paid');
             setConfirmedOrderDetails(matchedOrder);
+
+            fetch('/api/send-order-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: matchedOrder.id,
+                customerName: matchedOrder.customerName,
+                customerEmail: matchedOrder.email,
+                customerPhone: matchedOrder.phone,
+                secondaryPhone: matchedOrder.secondaryPhone || '',
+                shippingAddress: `${matchedOrder.address}, ${matchedOrder.city}, ${matchedOrder.postalCode}`,
+                paymentMethod: matchedOrder.paymentMethod,
+                shippingMethod: matchedOrder.shippingMethod,
+                items: matchedOrder.items.map(item => ({
+                  name: item.product.name,
+                  quantity: item.quantity,
+                  price: item.product.priceLkr,
+                  total: item.product.priceLkr * item.quantity,
+                })),
+                subtotal: matchedOrder.subtotalLkr,
+                shippingFee: matchedOrder.shippingLkr,
+                totalAmount: matchedOrder.totalLkr,
+                orderDate: matchedOrder.createdAt,
+              }),
+            }).catch(err => console.error('Email dispatch error:', err));
           }
 
           setOrderConfirmed(true);
@@ -240,13 +290,8 @@ export default function CheckoutPage() {
       try {
         const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
 
-        // Save order & email first
+        // Save order (DO NOT send email yet for online payments)
         addStoredOrder(newOrderPayload);
-        fetch('/api/send-order-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload),
-        }).catch(() => {});
 
         const payzyRes = await fetch('/api/payzy/checkout', {
           method: 'POST',
@@ -302,12 +347,8 @@ export default function CheckoutPage() {
           throw new Error(hashData.message || hashData.error || 'Failed to generate PayHere payment hash');
         }
 
+        // Save Order (DO NOT send email yet for online payments)
         addStoredOrder(newOrderPayload);
-        fetch('/api/send-order-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload),
-        }).catch(() => {});
         clearCart();
 
         const payhereParams = preparePayHereForm(newOrderPayload, originUrl, hashData.hash);

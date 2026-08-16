@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
 import PromoCodeModel from '@/lib/models/PromoCode';
 
@@ -29,6 +30,27 @@ const defaultSeedPromo: PromoCodeType = {
 };
 
 let inMemoryPromos: PromoCodeType[] = [defaultSeedPromo];
+
+// Helper query builder that works with both MongoDB ObjectIds and custom string IDs / code names
+const getQuery = (idOrCode: string) => {
+  if (mongoose.Types.ObjectId.isValid(idOrCode) && idOrCode.length === 24) {
+    return {
+      $or: [
+        { _id: new mongoose.Types.ObjectId(idOrCode) },
+        { id: idOrCode },
+        { code: idOrCode.toUpperCase() },
+        { code: idOrCode }
+      ]
+    };
+  }
+  return {
+    $or: [
+      { id: idOrCode },
+      { code: idOrCode.toUpperCase() },
+      { code: idOrCode }
+    ]
+  };
+};
 
 function formatPromoDoc(doc: any): PromoCodeType {
   return {
@@ -123,7 +145,7 @@ export async function POST(request: Request) {
     if (isMongoConfigured()) {
       const conn = await connectToDatabase();
       if (conn) {
-        const existing = await PromoCodeModel.findOne({ code: cleanCode });
+        const existing = await PromoCodeModel.findOne(getQuery(cleanCode));
         if (existing) {
           return NextResponse.json({ success: false, error: `Promo code '${cleanCode}' already exists` }, { status: 400 });
         }
@@ -176,9 +198,9 @@ export async function PUT(request: Request) {
       const conn = await connectToDatabase();
       if (conn) {
         const doc = await PromoCodeModel.findOneAndUpdate(
-          { $or: [{ id }, { _id: id }] },
+          getQuery(String(id)),
           updatePayload,
-          { returnDocument: 'after' }
+          { new: true }
         );
 
         if (!doc) {
@@ -190,7 +212,7 @@ export async function PUT(request: Request) {
     }
 
     // In-memory fallback
-    const idx = inMemoryPromos.findIndex(p => p.id === id);
+    const idx = inMemoryPromos.findIndex(p => p.id === id || p.code === String(id).toUpperCase());
     if (idx === -1) {
       return NextResponse.json({ success: false, error: 'Promo code not found' }, { status: 404 });
     }
@@ -220,11 +242,11 @@ export async function DELETE(request: Request) {
     if (isMongoConfigured()) {
       const conn = await connectToDatabase();
       if (conn) {
-        await PromoCodeModel.deleteOne({ $or: [{ id }, { _id: id }] });
+        await PromoCodeModel.findOneAndDelete(getQuery(String(id)));
       }
     }
 
-    inMemoryPromos = inMemoryPromos.filter(p => p.id !== id);
+    inMemoryPromos = inMemoryPromos.filter(p => p.id !== id && p.code !== String(id).toUpperCase());
 
     return NextResponse.json({ success: true, deletedId: id });
   } catch (error: unknown) {

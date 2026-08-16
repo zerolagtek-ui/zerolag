@@ -9,6 +9,8 @@ export interface IOrderDocument extends Document {
   shipping_address: string;
   payment_method: string;
   shipping_method?: string;
+  courier?: string;
+  tracking_number?: string;
   items: Schema.Types.Mixed[];
   subtotal: number;
   shipping_fee: number;
@@ -27,6 +29,8 @@ const OrderSchema = new Schema<IOrderDocument>(
     shipping_address: { type: String, required: true },
     payment_method: { type: String, required: true },
     shipping_method: { type: String, default: 'Trans Express' },
+    courier: { type: String },
+    tracking_number: { type: String },
     items: { type: [Schema.Types.Mixed], default: [] },
     subtotal: { type: Number, default: 0 },
     shipping_fee: { type: Number, default: 0 },

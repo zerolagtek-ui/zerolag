@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Update Order in MongoDB if connected
+    let dbOrder = null;
     try {
       await connectToDatabase();
-      await OrderModel.findOneAndUpdate(
+      dbOrder = await OrderModel.findOneAndUpdate(
         { id: x_order_id },
         {
           status: 'Paid',
@@ -78,6 +79,33 @@ export async function POST(req: NextRequest) {
       );
     } catch (dbErr) {
       console.warn('[Payzy DB Update Warning]:', dbErr);
+    }
+
+    // Trigger send-order-email ONLY when response_code === '00' (successful payment)
+    if (response_code === '00' && dbOrder) {
+      try {
+        const originUrl = req.nextUrl.origin;
+        fetch(`${originUrl}/api/send-order-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: dbOrder.id,
+            customerName: dbOrder.customer_name,
+            customerEmail: dbOrder.customer_email,
+            customerPhone: dbOrder.customer_phone,
+            shippingAddress: dbOrder.shipping_address,
+            paymentMethod: dbOrder.payment_method || 'payzy',
+            shippingMethod: dbOrder.shipping_method || 'Trans Express',
+            items: dbOrder.items || [],
+            subtotal: dbOrder.subtotal,
+            shippingFee: dbOrder.shipping_fee,
+            totalAmount: dbOrder.total_amount,
+            orderDate: dbOrder.created_at || new Date().toISOString()
+          })
+        }).catch(err => console.error('[Payzy Verify Email Dispatch Error]:', err));
+      } catch (emailErr) {
+        console.error('[Payzy Verify Email Error]:', emailErr);
+      }
     }
 
     return NextResponse.json({ success: true, status: 'PAID', orderId: x_order_id });

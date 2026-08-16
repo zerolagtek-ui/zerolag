@@ -76,7 +76,8 @@ import {
   FileSpreadsheet,
   Truck,
   Menu,
-  ChevronRight
+  ChevronRight,
+  ArrowRight
 } from 'lucide-react';
 
 
@@ -173,6 +174,13 @@ export default function AdminPage() {
   // Cloudinary Image Upload State
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string>('');
+
+  // Shipping Dispatch Modal & Toast State
+  const [shippingModalOpen, setShippingModalOpen] = useState<boolean>(false);
+  const [selectedShippingOrder, setSelectedShippingOrder] = useState<OrderDetails | null>(null);
+  const [courierInput, setCourierInput] = useState<string>('Trans Express');
+  const [trackingInput, setTrackingInput] = useState<string>('');
+  const [shippingToastNotice, setShippingToastNotice] = useState<string>('');
 
   // Product Form Modal state (Create & Edit)
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
@@ -958,7 +966,55 @@ export default function AdminPage() {
   };
 
   const handleStatusChange = (orderId: string, newStatus: OrderStatus) => {
-    setOrders(updateOrderStatus(orderId, newStatus));
+    const targetOrder = orders.find(o => o.id === orderId);
+    if (newStatus === 'Shipped' && targetOrder) {
+      setSelectedShippingOrder(targetOrder);
+      setCourierInput(targetOrder.courier || 'Trans Express');
+      setTrackingInput(targetOrder.trackingNumber || '');
+      setShippingModalOpen(true);
+      return;
+    }
+
+    const updated = updateOrderStatus(orderId, newStatus);
+    setOrders(updated);
+  };
+
+  const handleConfirmShippingDispatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedShippingOrder || !selectedShippingOrder.id) return;
+
+    const orderId = selectedShippingOrder.id;
+    const courier = courierInput.trim() || 'Trans Express';
+    const tracking = trackingInput.trim() || ('TX-' + Math.floor(100000 + Math.random() * 900000));
+
+    // 1. Update Order Status & Tracking Info
+    const updated = updateOrderStatus(orderId, 'Shipped', courier, tracking);
+    setOrders(updated);
+
+    // 2. Trigger automated shipping notification email via Brevo REST API
+    try {
+      fetch('/api/send-shipping-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: orderId,
+          customerName: selectedShippingOrder.customerName,
+          customerEmail: selectedShippingOrder.email,
+          customerPhone: selectedShippingOrder.phone,
+          shippingAddress: selectedShippingOrder.address,
+          courierName: courier,
+          trackingNumber: tracking,
+        })
+      }).catch(err => console.error('Shipping email error:', err));
+    } catch (err) {
+      console.error('Error dispatching shipping email:', err);
+    }
+
+    // 3. Show Toast Notice & Close Modal
+    setShippingModalOpen(false);
+    setSelectedShippingOrder(null);
+    setShippingToastNotice('Order marked as Shipped & Notification Email sent to customer!');
+    setTimeout(() => setShippingToastNotice(''), 5000);
   };
 
   const handleSaveBankConfig = (e: React.FormEvent) => {
@@ -1552,6 +1608,13 @@ export default function AdminPage() {
         {/* TAB 2: ORDERS MANAGEMENT */}
         {activeTab === 'orders' && (
           <div className="space-y-6">
+            {shippingToastNotice && (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 font-mono text-xs flex items-center gap-2 animate-fade-in shadow-lg">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <span>{shippingToastNotice}</span>
+              </div>
+            )}
+
             <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-[#0a0c10] shadow-sm">
               <table className="w-full text-left text-xs font-mono">
                 <thead className="bg-zinc-950 border-b border-zinc-800 text-lime-400 uppercase tracking-wider">
@@ -1578,6 +1641,11 @@ export default function AdminPage() {
                         <p className="font-bold text-white">{order.customerName}</p>
                         <p className="text-[10px] text-zinc-400">{order.phone} • {order.email}</p>
                         <p className="text-[10px] text-zinc-500">{order.address}, {order.city}</p>
+                        {order.courier && (
+                          <p className="text-[10px] text-lime-400 font-mono pt-1">
+                            🚚 {order.courier} {order.trackingNumber ? `(${order.trackingNumber})` : ''}
+                          </p>
+                        )}
                       </td>
 
                       <td className="p-4">
@@ -1633,6 +1701,82 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Shipping Dispatch Confirmation Modal */}
+            {shippingModalOpen && selectedShippingOrder && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl p-6 space-y-4 font-mono shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                    <div className="flex items-center gap-2 text-lime-400 font-extrabold text-sm">
+                      <Truck className="w-5 h-5" />
+                      <span>DISPATCH ORDER #{selectedShippingOrder.id}</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShippingModalOpen(false);
+                        setSelectedShippingOrder(null);
+                      }}
+                      className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-900 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-zinc-300 font-sans leading-relaxed">
+                    Mark order as <strong className="text-lime-400">Shipped</strong> and dispatch an automated shipping notification email to <strong className="text-white">{selectedShippingOrder.email}</strong>.
+                  </p>
+
+                  <form onSubmit={handleConfirmShippingDispatch} className="space-y-4 text-xs font-mono">
+                    <div>
+                      <label className="text-zinc-400 block mb-1">Courier Partner *</label>
+                      <select
+                        value={courierInput}
+                        onChange={(e) => setCourierInput(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                      >
+                        <option value="Trans Express">Trans Express</option>
+                        <option value="PromptX">PromptX Courier</option>
+                        <option value="Pronto">Pronto Courier</option>
+                        <option value="Koombiyo">Koombiyo Delivery</option>
+                        <option value="Domex">Domex Express</option>
+                        <option value="Fardar">Fardar Express</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-zinc-400 block mb-1">Tracking / Waybill Number (Optional)</label>
+                      <input
+                        type="text"
+                        value={trackingInput}
+                        onChange={(e) => setTrackingInput(e.target.value)}
+                        placeholder="e.g. TX-849201"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShippingModalOpen(false);
+                          setSelectedShippingOrder(null);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold flex items-center gap-2 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer shadow-lg shadow-lime-400/20"
+                      >
+                        <span>Confirm & Send Email</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

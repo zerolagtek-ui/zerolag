@@ -51,3 +51,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: 'Failed to create order' }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    await connectToDatabase();
+    const body = await request.json();
+    const { id, status, paymentStatus, courier, trackingNumber } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Order ID is required' }, { status: 400 });
+    }
+
+    const updateFields: Record<string, unknown> = {};
+    if (status) updateFields.status = status;
+    if (paymentStatus) updateFields.payment_status = paymentStatus;
+    if (courier !== undefined) updateFields.courier = courier;
+    if (trackingNumber !== undefined) updateFields.tracking_number = trackingNumber;
+
+    const updatedOrder = await OrderModel.findOneAndUpdate(
+      { id },
+      { $set: updateFields },
+      { new: true }
+    );
+
+    return NextResponse.json({ success: true, order: updatedOrder });
+  } catch (error) {
+    console.error('Failed to update order in MongoDB:', error);
+    return NextResponse.json({ success: false, error: 'Failed to update order' }, { status: 500 });
+  }
+}

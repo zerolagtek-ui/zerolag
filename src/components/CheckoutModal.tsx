@@ -207,13 +207,8 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         const firstName = nameParts[0] || 'Customer';
         const lastName = nameParts.slice(1).join(' ') || '';
 
-        // Save order & email first
+        // Save pending order first (DO NOT send email yet for online payments)
         addStoredOrder(newOrderPayload);
-        fetch('/api/send-order-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload)
-        }).catch(() => {});
 
         const payzyRes = await fetch('/api/payzy/checkout', {
           method: 'POST',
@@ -270,13 +265,8 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           throw new Error(errorMessage);
         }
 
-        // 1. Create/Save Pending Order first
+        // Save Pending Order first (DO NOT send email yet for online payments)
         addStoredOrder(newOrderPayload);
-        fetch('/api/send-order-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(emailPayload)
-        }).catch(() => {});
         clearCart();
 
         // 2 & 3. Prepare standard PayHere POST parameters
@@ -320,11 +310,11 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   )}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#0a0c10] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden font-mono my-8">
+    <div className="fixed inset-0 z-50 flex items-center sm:items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl max-h-[90dvh] flex flex-col overflow-hidden my-auto font-mono shadow-2xl">
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 border-b border-zinc-800/80 bg-zinc-950/60">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800/80 bg-zinc-950/60 shrink-0">
           <div className="flex items-center gap-2 text-white font-extrabold text-sm tracking-wide">
             <ShieldCheck className="w-5 h-5 text-lime-400" />
             <span>QUICK CHECKOUT WIZARD</span>
@@ -339,7 +329,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
         {orderConfirmed ? (
           /* Order Confirmed View */
-          <div className="p-8 text-center space-y-6">
+          <div className="overflow-y-auto flex-1 p-6 text-center space-y-6">
             <div className="w-16 h-16 rounded-full bg-lime-400/20 text-lime-400 border border-lime-400/40 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-10 h-10 animate-bounce" />
             </div>
@@ -372,7 +362,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           </div>
         ) : (
           /* Step Wizard View */
-          <div className="p-5 sm:p-6 space-y-6">
+          <div className="overflow-y-auto flex-1 p-4 sm:p-6 space-y-4">
 
             {/* Step Indicator Header */}
             <div className="grid grid-cols-3 gap-2 border-b border-zinc-800/80 pb-4">

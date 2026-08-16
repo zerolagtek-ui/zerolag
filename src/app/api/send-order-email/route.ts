@@ -95,62 +95,54 @@ export async function POST(request: Request) {
       });
     }
 
-    // Formatted items HTML table rows
+    // Formatted items HTML table rows with high contrast
     const itemsRowsHtml = items.map((item: NormalizedOrderItem, idx: number) => `
-      <tr style="background-color: ${idx % 2 === 0 ? '#0a0c10' : '#12151e'}; font-family: monospace;">
-        <td style="padding: 12px; border-bottom: 1px solid #27272a; color: #f4f4f5;">${item.name}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #27272a; text-align: center; color: #a3e635; font-weight: bold;">x${item.quantity}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #27272a; text-align: right; color: #d4d4d8;">LKR ${item.price.toLocaleString()}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #27272a; text-align: right; color: #a3e635; font-weight: bold;">LKR ${item.total.toLocaleString()}</td>
+      <tr style="background-color: ${idx % 2 === 0 ? '#12131a' : '#181924'}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <td style="padding: 12px 14px; border-bottom: 1px solid #27272a;"><strong style="color: #ffffff; font-size: 14px;">${item.name}</strong></td>
+        <td style="padding: 12px 14px; border-bottom: 1px solid #27272a; text-align: center;"><span style="color: #a1a1aa; font-size: 14px; font-weight: bold;">x${item.quantity}</span></td>
+        <td style="padding: 12px 14px; border-bottom: 1px solid #27272a; text-align: right;"><span style="color: #f4f4f5; font-size: 13px;">LKR ${item.price.toLocaleString()}</span></td>
+        <td style="padding: 12px 14px; border-bottom: 1px solid #27272a; text-align: right;"><strong style="color: #22c55e; font-size: 14px;">LKR ${item.total.toLocaleString()}</strong></td>
       </tr>
     `).join('');
 
-    // 1. Customer Order Receipt HTML Template (Cyberpunk Dark UI)
+    // 1. Customer Order Receipt HTML Template (High-Contrast, Responsive)
     const customerEmailHtml = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <style>
-          body { background-color: #000000; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }
-          .card { max-width: 640px; margin: 0 auto; background-color: #090b0e; border: 1px solid #27272a; border-radius: 20px; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,0.8); }
-          .header { border-bottom: 2px solid #a3e635; padding-bottom: 16px; margin-bottom: 24px; text-align: center; }
-          .badge { background: linear-gradient(90deg, #a3e635, #10b981); color: #000000; font-weight: 900; font-family: monospace; padding: 4px 12px; border-radius: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-          .title { font-size: 22px; font-weight: 800; color: #ffffff; margin-top: 12px; font-family: monospace; }
-          .info-box { background-color: #0d1117; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; margin: 20px 0; font-size: 13px; font-family: monospace; }
-          .table-container { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid #27272a; }
-          table { width: 100%; border-collapse: collapse; font-size: 13px; }
-          th { background-color: #18181b; color: #a3e635; text-transform: uppercase; font-family: monospace; font-size: 11px; padding: 12px; text-align: left; letter-spacing: 1px; }
-          .total-box { background: #111827; border: 1px solid #a3e635; border-radius: 12px; padding: 16px; text-align: right; margin-top: 20px; font-family: monospace; }
-          .whatsapp-btn { display: inline-block; background-color: #22c55e; color: #000000; font-family: monospace; font-weight: 900; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-size: 13px; margin-top: 16px; letter-spacing: 0.5px; }
-        </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
       </head>
-      <body>
-        <div class="card">
-          <div class="header">
-            <span class="badge">Official Order Receipt</span>
-            <h1 class="title">ZEROLAG TEK STORE</h1>
-            <p style="color: #a1a1aa; font-size: 13px; margin: 4px 0 0 0;">Thank you for your order, <strong>${customerName}</strong>!</p>
+      <body style="background-color: #050608; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 16px;">
+        <div style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #12131a; border: 1px solid #27272a; border-radius: 16px; padding: 24px; box-sizing: border-box;">
+          
+          <!-- Header -->
+          <div style="border-bottom: 2px solid #22c55e; padding-bottom: 16px; margin-bottom: 24px; text-align: center;">
+            <span style="background-color: #22c55e; color: #000000; font-weight: 800; padding: 4px 12px; border-radius: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">Official Order Receipt</span>
+            <h1 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 12px 0 4px 0; letter-spacing: 1px;">ZEROLAG TEK STORE</h1>
+            <p style="color: #a1a1aa; font-size: 14px; margin: 4px 0 0 0;">Thank you for your order, <strong style="color: #ffffff;">${customerName}</strong>!</p>
           </div>
 
-          <div class="info-box">
-            <div style="color: #a3e635; font-weight: bold; margin-bottom: 12px; font-size: 14px;">ORDER SUMMARY</div>
-            <p style="margin: 4px 0;"><strong>Order Reference:</strong> <span style="color: #a3e635;">#${orderId}</span></p>
-            <p style="margin: 4px 0;"><strong>Order Date:</strong> ${new Date(orderDate).toLocaleString()}</p>
-            <p style="margin: 4px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
-            <p style="margin: 4px 0;"><strong>Shipping Destination:</strong> ${shippingAddress}</p>
-            <p style="margin: 4px 0;"><strong>Phone Contact:</strong> ${customerPhone}</p>
-            <p style="margin: 4px 0;"><strong>Estimated Delivery:</strong> <span style="color: #38bdf8;">2 - 3 Business Days Across Sri Lanka</span></p>
+          <!-- Order Summary Box -->
+          <div style="background-color: #181924; border: 1px solid #27272a; border-radius: 12px; padding: 18px; margin: 20px 0; font-size: 13px; line-height: 1.6;">
+            <div style="color: #22c55e; font-weight: 800; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Order Summary</div>
+            <p style="margin: 6px 0;"><span style="color: #a1a1aa;">Order Reference:</span> <strong style="color: #22c55e; font-size: 14px;">#${orderId}</strong></p>
+            <p style="margin: 6px 0;"><span style="color: #a1a1aa;">Order Date:</span> <span style="color: #f4f4f5; font-weight: 500;">${new Date(orderDate).toLocaleString()}</span></p>
+            <p style="margin: 6px 0;"><span style="color: #a1a1aa;">Payment Method:</span> <span style="color: #f4f4f5; font-weight: 500;">${paymentMethod}</span></p>
+            <p style="margin: 6px 0;"><span style="color: #a1a1aa;">Shipping Address:</span> <span style="color: #f4f4f5; font-weight: 500;">${shippingAddress}</span></p>
+            <p style="margin: 6px 0;"><span style="color: #a1a1aa;">Phone Contact:</span> <span style="color: #f4f4f5; font-weight: 500;">${customerPhone}</span></p>
+            <p style="margin: 6px 0;"><span style="color: #a1a1aa;">Estimated Delivery:</span> <span style="color: #38bdf8; font-weight: 600;">2 - 3 Business Days Across Sri Lanka</span></p>
           </div>
 
-          <div class="table-container">
-            <table>
+          <!-- Items Table -->
+          <div style="margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid #27272a;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
               <thead>
-                <tr>
-                  <th>Product Item</th>
-                  <th style="text-align: center;">Qty</th>
-                  <th style="text-align: right;">Price</th>
-                  <th style="text-align: right;">Total</th>
+                <tr style="background-color: #18181b;">
+                  <th style="padding: 12px 14px; color: #a1a1aa; text-transform: uppercase; font-size: 11px; text-align: left; letter-spacing: 0.5px;">Product Item</th>
+                  <th style="padding: 12px 14px; color: #a1a1aa; text-transform: uppercase; font-size: 11px; text-align: center; letter-spacing: 0.5px;">Qty</th>
+                  <th style="padding: 12px 14px; color: #a1a1aa; text-transform: uppercase; font-size: 11px; text-align: right; letter-spacing: 0.5px;">Price</th>
+                  <th style="padding: 12px 14px; color: #a1a1aa; text-transform: uppercase; font-size: 11px; text-align: right; letter-spacing: 0.5px;">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,18 +151,21 @@ export async function POST(request: Request) {
             </table>
           </div>
 
-          <div class="total-box">
-            <p style="margin: 2px 0; color: #9ca3af; font-size: 12px;">Subtotal: LKR ${subtotal.toLocaleString()}</p>
-            <p style="margin: 2px 0; color: #9ca3af; font-size: 12px;">Delivery Fee: ${shippingFee === 0 ? 'FREE DELIVERY' : `LKR ${shippingFee.toLocaleString()}`}</p>
-            <h3 style="margin: 8px 0 0 0; color: #a3e635; font-size: 20px; font-weight: 900;">Total Payable: LKR ${totalAmount.toLocaleString()}</h3>
+          <!-- Summary / Total Box -->
+          <div style="background-color: #181924; border: 1px solid #22c55e; border-radius: 12px; padding: 18px; text-align: right; margin-top: 20px;">
+            <p style="margin: 4px 0; color: #d4d4d8; font-size: 13px;">Subtotal: <strong style="color: #ffffff;">LKR ${subtotal.toLocaleString()}</strong></p>
+            <p style="margin: 4px 0; color: #d4d4d8; font-size: 13px;">Delivery Fee: <strong style="color: #22c55e;">${shippingFee === 0 ? 'FREE DELIVERY' : `LKR ${shippingFee.toLocaleString()}`}</strong></p>
+            <h3 style="margin: 10px 0 0 0; color: #22c55e; font-size: 20px; font-weight: 800;">Total Payable: LKR ${totalAmount.toLocaleString()}</h3>
           </div>
 
-          <div style="text-align: center; margin-top: 28px; border-t: 1px solid #1f2937; padding-top: 20px;">
-            <p style="color: #a1a1aa; font-size: 12px; margin-bottom: 8px;">Need order updates or slip submission? WhatsApp our support line directly:</p>
-            <a href="https://wa.me/94741117981?text=${encodeURIComponent(`Hello ZeroLag Tek Support! I have a question regarding Order #${orderId}`)}" class="whatsapp-btn">
+          <!-- WhatsApp Support CTA -->
+          <div style="text-align: center; margin-top: 28px; border-top: 1px solid #27272a; padding-top: 20px;">
+            <p style="color: #a1a1aa; font-size: 13px; margin-bottom: 12px;">Need order updates or slip submission? WhatsApp our support line directly:</p>
+            <a href="https://wa.me/94741117981?text=${encodeURIComponent(`Hello ZeroLag Tek Support! I have a question regarding Order #${orderId}`)}" style="display: inline-block; background-color: #22c55e; color: #000000; font-weight: 800; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-size: 13px; letter-spacing: 0.5px;">
               💬 WHATSAPP LIVE SUPPORT: +94741117981
             </a>
           </div>
+
         </div>
       </body>
       </html>

@@ -236,7 +236,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-black/90 text-white border-b border-zinc-800 transition-colors shadow-sm">
       
       {/* Top Banner Notice & Direct WhatsApp CTA */}
-      <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-[10px] sm:text-xs font-bold py-1 px-3 sm:px-4 text-slate-950 tracking-wider flex items-center justify-between overflow-hidden">
+      <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-[10px] sm:text-xs font-bold py-1 px-3 sm:px-4 text-slate-950 tracking-wider flex items-center justify-between w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
         <div className="hidden md:flex items-center gap-2 mx-auto uppercase truncate">
           <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
           <span className="truncate">ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
@@ -256,7 +256,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
       </div>
 
       {/* Main Header Container */}
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-full px-3 sm:px-6">
         <div className="flex items-center justify-between h-16 w-full gap-2">
 
           {/* Compact Logo Section */}

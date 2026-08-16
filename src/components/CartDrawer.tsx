@@ -54,15 +54,15 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="absolute inset-y-0 right-0 w-full sm:max-w-md flex">
         
-        <div className="w-screen max-w-md bg-[#0c0e14] text-white border-l border-zinc-800 flex flex-col shadow-2xl transition-colors">
+        <div className="w-full sm:max-w-md h-full max-h-[100dvh] bg-[#0c0e14] text-white border-l border-zinc-800 flex flex-col shadow-2xl transition-colors">
           
           {/* Header */}
-          <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
+          <div className="p-4 sm:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950 shrink-0">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-lime-400" />
-              <h2 className="font-extrabold text-lg tracking-wide text-white">YOUR SHOPPING CART</h2>
+              <h2 className="font-extrabold text-base sm:text-lg tracking-wide text-white">YOUR SHOPPING CART</h2>
             </div>
             <button
               onClick={() => setIsCartOpen(false)}
@@ -73,34 +73,34 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
           </div>
 
           {/* Cart Listing */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 scrollbar-thin scrollbar-thumb-zinc-800">
             {cart.length > 0 ? (
               cart.map(({ product, quantity }) => (
                 <div
                   key={product.id}
-                  className="flex gap-4 p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition-all"
+                  className="flex gap-3 p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition-all overflow-hidden"
                 >
-                  <Link href={`/product/${getProductSlug(product)}`} onClick={() => setIsCartOpen(false)}>
+                  <Link href={`/product/${getProductSlug(product)}`} onClick={() => setIsCartOpen(false)} className="shrink-0">
                     <img
                       src={product.image}
                       alt={product.name}
-                      className="w-16 h-16 rounded-xl object-cover bg-zinc-950 border border-zinc-800 shrink-0"
+                      className="w-16 h-16 shrink-0 aspect-square rounded-lg bg-zinc-900 p-1 object-contain border border-zinc-800"
                     />
                   </Link>
-                  <div className="flex-1 flex flex-col justify-between">
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
                     <div>
                       <Link
                         href={`/product/${getProductSlug(product)}`}
                         onClick={() => setIsCartOpen(false)}
-                        className="font-bold text-xs text-white line-clamp-1 hover:text-lime-400 transition-colors"
+                        className="font-bold text-xs text-white truncate block hover:text-lime-400 transition-colors"
                       >
                         {product.name}
                       </Link>
-                      <p className="text-[10px] text-lime-400 font-mono mt-0.5">{product.brand}</p>
+                      <p className="text-[10px] text-lime-400 font-mono mt-0.5 truncate">{product.brand}</p>
                     </div>
 
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex items-center bg-zinc-950 rounded-lg border border-zinc-800 p-0.5">
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <div className="flex items-center bg-zinc-950 rounded-lg border border-zinc-800 p-0.5 shrink-0">
                         <button
                           onClick={() => updateQuantity(product.id, quantity - 1)}
                           className="w-6 h-6 text-zinc-400 hover:text-white flex items-center justify-center font-bold text-xs"
@@ -116,8 +116,8 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono font-bold text-lime-400">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-mono font-bold text-lime-400 whitespace-nowrap">
                           {formatPrice(product.priceLkr * quantity)}
                         </span>
                         <button

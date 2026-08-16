@@ -95,6 +95,8 @@ export interface OrderDetails {
   paymentMethod: PaymentMethod;
   shippingMethod?: string;
   shippingFee?: number;
+  courier?: string;
+  trackingNumber?: string;
   paymentStatus?: PaymentStatus;
   orderStatus?: OrderStatus;
   items: CartItem[];

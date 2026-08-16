@@ -34,7 +34,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className="bg-black text-slate-100 min-h-screen flex flex-col selection:bg-lime-400 selection:text-slate-950">
+      <body className="bg-black text-slate-100 min-h-screen max-w-full overflow-x-hidden flex flex-col selection:bg-lime-400 selection:text-slate-950">
         <Script
           id="payhere-sdk"
           src={PAYHERE_PRELOAD_URL}
