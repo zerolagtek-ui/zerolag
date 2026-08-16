@@ -9,7 +9,14 @@ export async function GET(request: NextRequest) {
     const responseCode = searchParams.get('response_code');
 
     const isSuccess = responseCode === '00';
-    const origin = request.nextUrl.origin || process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+    const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+    const siteUrlFromEnv = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || process.env.SITE_URL;
+
+    const origin = siteUrlFromEnv 
+      ? siteUrlFromEnv.replace(/\/$/, '') 
+      : (host ? `${proto}://${host}` : request.nextUrl.origin);
 
     if (isSuccess && orderId) {
       let dbOrder = null;
@@ -58,7 +65,13 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('Payzy GET verification error:', error);
-    return NextResponse.redirect(new URL('/checkout?error=server_error', request.url));
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+    const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+    const siteUrlFromEnv = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || process.env.SITE_URL;
+    const origin = siteUrlFromEnv 
+      ? siteUrlFromEnv.replace(/\/$/, '') 
+      : (host ? `${proto}://${host}` : request.nextUrl.origin);
+    return NextResponse.redirect(`${origin}/checkout?error=server_error`);
   }
 }
 
@@ -86,7 +99,12 @@ export async function POST(request: NextRequest) {
 
       if (dbOrder) {
         try {
-          const originUrl = request.nextUrl.origin;
+          const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+          const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+          const siteUrlFromEnv = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || process.env.SITE_URL;
+          const originUrl = siteUrlFromEnv 
+            ? siteUrlFromEnv.replace(/\/$/, '') 
+            : (host ? `${proto}://${host}` : request.nextUrl.origin);
           fetch(`${originUrl}/api/send-order-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

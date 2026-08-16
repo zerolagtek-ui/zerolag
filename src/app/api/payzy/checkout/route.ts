@@ -22,10 +22,17 @@ export async function POST(req: Request) {
     const email = String(body.email || '').trim() || 'customer@example.com';
     const country = String(body.country || '').trim() || 'Sri Lanka';
 
-    const reqHost = req.headers.get('host') || 'localhost:3000';
-    const reqProtocol = req.headers.get('x-forwarded-proto') || 'http';
-    const dynamicOrigin = `${reqProtocol}://${reqHost}`;
-    const responseUrl = body.response_url || body.responseUrl || `${dynamicOrigin}/api/payzy/verify`;
+    // Determine true base URL (supports Vercel, custom domain, or local dev)
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+    const proto = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+
+    const siteUrlFromEnv = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || process.env.SITE_URL;
+
+    const resolvedBaseUrl = siteUrlFromEnv 
+      ? siteUrlFromEnv.replace(/\/$/, '') 
+      : (host ? `${proto}://${host}` : 'https://zerolagtek.com');
+
+    const responseUrl = `${resolvedBaseUrl}/api/payzy/verify`;
 
     const payloadData: Record<string, string> = {
       x_test_mode: (process.env.PAYZY_TEST_MODE || 'on').trim(),
