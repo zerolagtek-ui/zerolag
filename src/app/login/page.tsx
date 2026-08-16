@@ -32,15 +32,14 @@ export default function LoginPage() {
 
       const data = await res.json().catch(() => ({}));
 
-      if (res.ok && data.success && data.role === 'admin') {
+      if (data.success) {
         sessionStorage.setItem('zerolag_admin_auth', 'true');
         window.dispatchEvent(new Event('zerolag-admin-auth-changed'));
-        setLoading(false);
-        router.push('/admin');
+        window.location.href = '/admin'; // Force full redirect to sync cookies
         return;
       }
 
-      setError(data.error || 'Invalid email or password');
+      setError(data.error || 'Invalid credentials');
       setLoading(false);
     } catch (err: unknown) {
       console.error('[Login Error]:', err);

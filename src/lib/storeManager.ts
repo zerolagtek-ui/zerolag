@@ -478,6 +478,8 @@ export function deleteHeroSlide(slideId: string): HeroSlide[] {
 }
 
 // Dynamic Categories Store API
+let activeCategoryPromise: Promise<Category[]> | null = null;
+
 export function getDynamicCategories(): Category[] {
   if (typeof window === 'undefined') return DEFAULT_CATEGORIES;
   try {
@@ -502,10 +504,46 @@ export function saveCategories(categories: Category[]): void {
   }
 }
 
+export async function syncCategoriesFromDatabase(): Promise<Category[]> {
+  const localCategories = getDynamicCategories();
+  if (typeof window === 'undefined') return localCategories;
+
+  if (activeCategoryPromise) return activeCategoryPromise;
+
+  activeCategoryPromise = (async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.success && Array.isArray(data.categories) && data.categories.length > 0) {
+          saveCategories(data.categories);
+          return data.categories;
+        }
+      }
+    } catch (err) {
+      console.warn('[Category API Sync Warning]:', err);
+    } finally {
+      activeCategoryPromise = null;
+    }
+    return localCategories;
+  })();
+
+  return activeCategoryPromise;
+}
+
 export function addCategory(category: Category): Category[] {
   const categories = getDynamicCategories();
   const updated = [...categories, category];
   saveCategories(updated);
+
+  if (typeof window !== 'undefined') {
+    fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(category)
+    }).catch(err => console.error('[Category API Insert Error]:', err));
+  }
+
   return updated;
 }
 
@@ -513,6 +551,15 @@ export function updateCategory(category: Category): Category[] {
   const categories = getDynamicCategories();
   const updated = categories.map(c => (c.id === category.id ? category : c));
   saveCategories(updated);
+
+  if (typeof window !== 'undefined') {
+    fetch('/api/categories', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(category)
+    }).catch(err => console.error('[Category API Update Error]:', err));
+  }
+
   return updated;
 }
 
@@ -520,8 +567,16 @@ export function deleteCategory(categoryId: string): Category[] {
   const categories = getDynamicCategories();
   const updated = categories.filter(c => c.id !== categoryId);
   saveCategories(updated);
+
+  if (typeof window !== 'undefined') {
+    fetch(`/api/categories?id=${encodeURIComponent(categoryId)}`, {
+      method: 'DELETE'
+    }).catch(err => console.error('[Category API Delete Error]:', err));
+  }
+
   return updated;
 }
+
 
 // Site Branding / Logo Store API
 export function cleanLogoUrl(url?: string): string {

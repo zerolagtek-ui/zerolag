@@ -18,8 +18,8 @@ function verifyTokenBasic(token: string): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isAdminPage = pathname.startsWith('/admin') && !pathname.startsWith('/admin/login');
-  const isAdminApi = pathname.startsWith('/api/admin') && !pathname.startsWith('/api/admin/login');
+  const isAdminPage = (pathname === '/admin' || pathname.startsWith('/admin/')) && !pathname.startsWith('/admin/login');
+  const isAdminApi = (pathname === '/api/admin' || pathname.startsWith('/api/admin/')) && !pathname.startsWith('/api/admin/login');
 
   if (isAdminPage || isAdminApi) {
     const token = request.cookies.get('zerolag_admin_session')?.value;
@@ -43,5 +43,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/api/admin/:path*'],
+  matcher: ['/admin', '/admin/:path*', '/api/admin', '/api/admin/:path*'],
 };

@@ -25,6 +25,7 @@ import {
   updateHeroSlide,
   deleteHeroSlide,
   getDynamicCategories,
+  saveCategories,
   addCategory,
   updateCategory,
   deleteCategory,
@@ -669,6 +670,23 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     setPromoNotice('');
   };
 
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.success && Array.isArray(data.categories)) {
+          setCategories(data.categories);
+          saveCategories(data.categories);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Categories Fetch Error]:', err);
+    }
+    setCategories(getDynamicCategories());
+  };
+
   const refreshData = async () => {
     await fetchProducts(productsPage, productsLimit, searchQuery, selectedCategoryFilter);
     await fetchOrders(ordersPage, ordersLimit, searchQuery);
@@ -677,7 +695,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     await fetchBank();
     await fetchShippingRates();
     await fetchPromoCodes();
-    setCategories(getDynamicCategories());
+    await fetchCategories();
     fetchReviews();
   };
 
@@ -1166,10 +1184,26 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     setIsCategoryModalOpen(true);
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const formattedId = categoryForm.id.toLowerCase().replace(/\s+/g, '-');
-    const finalCat = { ...categoryForm, id: formattedId };
+    const finalCat = { ...categoryForm, id: formattedId, slug: formattedId };
+
+    try {
+      const method = editingCategory ? 'PUT' : 'POST';
+      const res = await fetch('/api/categories', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalCat)
+      });
+      if (res.ok) {
+        await fetchCategories();
+        setIsCategoryModalOpen(false);
+        return;
+      }
+    } catch (err) {
+      console.error('[Save Category API Error]:', err);
+    }
 
     if (editingCategory) {
       setCategories(updateCategory(finalCat));
@@ -1179,8 +1213,19 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     setIsCategoryModalOpen(false);
   };
 
-  const handleDeleteCategory = (catId: string) => {
+  const handleDeleteCategory = async (catId: string) => {
     if (confirm(`Delete category "${catId}"? Products under this category will remain.`)) {
+      try {
+        const res = await fetch(`/api/categories?id=${encodeURIComponent(catId)}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          await fetchCategories();
+          return;
+        }
+      } catch (err) {
+        console.error('[Delete Category API Error]:', err);
+      }
       setCategories(deleteCategory(catId));
     }
   };

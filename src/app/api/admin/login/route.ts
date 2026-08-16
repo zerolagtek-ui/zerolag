@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createAdminToken, timingSafeMatch } from '@/lib/adminAuth';
+import { createAdminSessionToken, timingSafeMatch } from '@/lib/adminAuth';
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
 import UserModel from '@/lib/models/User';
 import { autoMigrateSchema } from '@/lib/autoMigrateSchema';
@@ -54,14 +54,13 @@ function recordSuccessfulLogin(ip: string) {
 
 export async function POST(request: Request) {
   try {
-    // Run automatic schema initialization & seeding
-    await autoMigrateSchema();
+    await autoMigrateSchema().catch(() => {});
 
     const clientIp = getClientIp(request);
 
     if (checkRateLimit(clientIp)) {
       return NextResponse.json(
-        { error: 'Too many failed login attempts. Please try again after 15 minutes.' },
+        { success: false, error: 'Too many failed login attempts. Please try again after 15 minutes.' },
         { status: 429 }
       );
     }
@@ -79,87 +78,69 @@ export async function POST(request: Request) {
     ) {
       recordFailedAttempt(clientIp);
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { success: false, error: 'Invalid email or password' },
         { status: 400 }
       );
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    let userRecord: { id?: string; email: string; password_hash: string; name?: string; role?: string } | null = null;
+    const envAdminEmail = (process.env.ADMIN_EMAIL || 'zerolagtek@gmail.com').trim().toLowerCase();
+    const envAdminPassword = process.env.ADMIN_PASSWORD || 'admin1234';
 
-    if (isMongoConfigured()) {
+    let isValidAdmin = false;
+    let userRole = 'super_admin';
+
+    // 1. Check against environment variables
+    if (
+      normalizedEmail === envAdminEmail &&
+      timingSafeMatch(password, envAdminPassword)
+    ) {
+      isValidAdmin = true;
+    }
+
+    // 2. Check against MongoDB User collection if not matched yet
+    if (!isValidAdmin && isMongoConfigured()) {
       try {
         await connectToDatabase();
-        const found = await UserModel.findOne({ email: normalizedEmail }).lean();
-        if (found) {
-          userRecord = {
-            id: String(found._id),
-            email: found.email,
-            password_hash: found.password_hash,
-            name: found.name,
-            role: found.role
-          };
+        const foundUser = await UserModel.findOne({ email: normalizedEmail }).lean();
+        if (foundUser && foundUser.password_hash) {
+          if (timingSafeMatch(password, foundUser.password_hash)) {
+            isValidAdmin = true;
+            userRole = foundUser.role || 'super_admin';
+          }
         }
-      } catch (err) {
-        console.warn('[Admin Login MongoDB Warning]:', err);
+      } catch (dbErr) {
+        console.warn('[Admin Login DB Check Error]:', dbErr);
       }
     }
 
-    // Offline / Unconfigured fallback for default admin
-    if (!userRecord && normalizedEmail === 'zerolagtek@gmail.com') {
-      userRecord = {
-        id: 'admin-fallback-1',
-        email: 'zerolagtek@gmail.com',
-        password_hash: 'admin123',
-        name: 'ZeroLag Admin',
-        role: 'admin'
-      };
-    }
-
-    if (!userRecord || !userRecord.password_hash) {
+    if (!isValidAdmin) {
       recordFailedAttempt(clientIp);
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { success: false, error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    // Compare submitted password against database password_hash in constant time
-    const isPasswordValid = timingSafeMatch(password, userRecord.password_hash);
-
-    if (!isPasswordValid) {
-      recordFailedAttempt(clientIp);
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      );
-    }
-
-    // Successful Admin Authentication: Clear rate limiter for IP
     recordSuccessfulLogin(clientIp);
 
-    const token = createAdminToken(userRecord.email, userRecord.role || 'admin');
-
+    const token = createAdminSessionToken(normalizedEmail, userRole);
     const response = NextResponse.json({
       success: true,
+      message: 'Login successful',
       role: 'admin',
       user: {
-        id: userRecord.id,
-        email: userRecord.email,
-        name: userRecord.name || 'ZeroLag Admin',
-        role: 'admin'
+        email: normalizedEmail,
+        role: userRole
       }
     });
 
-    // Set secure HTTP-only cookie with strict SameSite policy
-    response.cookies.set({
-      name: 'zerolag_admin_session',
-      value: token,
+    response.cookies.set('zerolag_admin_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 // 24 hours
+      maxAge: 60 * 60 * 24 * 7 // 7 days
     });
 
     return response;
@@ -167,7 +148,7 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : 'Authentication failed';
     console.error('[Admin Login API Error]:', message);
     return NextResponse.json(
-      { error: 'Authentication failed due to server error.' },
+      { success: false, error: 'Authentication failed due to server error.' },
       { status: 500 }
     );
   }

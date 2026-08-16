@@ -27,7 +27,7 @@ export function timingSafeMatch(a: string, b: string): boolean {
  */
 export function createAdminToken(email: string, role = 'super_admin'): string {
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + 60 * 60 * 24; // 24 hours validity
+  const exp = now + 60 * 60 * 24 * 7; // 7 days validity
   const payload: AdminSessionPayload = { email, role, iat: now, exp };
   const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
 
@@ -37,6 +37,16 @@ export function createAdminToken(email: string, role = 'super_admin'): string {
     .digest('base64url');
 
   return `${payloadBase64}.${signature}`;
+}
+
+/**
+ * Creates an HMAC-signed session token for the admin.
+ */
+export function createAdminSessionToken(
+  email: string = process.env.ADMIN_EMAIL || 'zerolagtek@gmail.com',
+  role: string = 'super_admin'
+): string {
+  return createAdminToken(email, role);
 }
 
 /**
