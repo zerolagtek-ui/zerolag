@@ -55,10 +55,22 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
   const estimatedTotal = (totalPriceLkr || subtotalLkr - discountAmountLkr) + deliveryFee;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="absolute inset-y-0 right-0 w-full sm:max-w-md flex">
+    <div className="fixed inset-0 z-[80] overflow-hidden">
+      
+      {/* Dark Backdrop Overlay with Desktop Outside Click Dismissal */}
+      <div
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 cursor-pointer animate-fade-in"
+        onClick={() => setIsCartOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* Sliding Drawer Container */}
+      <div className="absolute inset-y-0 right-0 w-full sm:max-w-md flex z-[85]">
         
-        <div className="w-full sm:max-w-md h-full max-h-[100dvh] bg-[#0c0e14] text-white border-l border-zinc-800 flex flex-col shadow-2xl transition-colors">
+        <div
+          className="w-full sm:max-w-md h-full max-h-[100dvh] bg-[#0c0e14] text-white border-l border-zinc-800 flex flex-col shadow-2xl transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
           
           {/* Header */}
           <div className="p-4 sm:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950 shrink-0">
@@ -68,7 +80,7 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
             </div>
             <button
               onClick={() => setIsCartOpen(false)}
-              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -140,7 +152,7 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                 <p className="text-sm font-mono text-zinc-400">Your shopping cart is empty</p>
                 <button
                   onClick={() => setIsCartOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-lime-400 hover:border-lime-400"
+                  className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-lime-400 hover:border-lime-400 cursor-pointer"
                 >
                   Explore Tech Hardware
                 </button>

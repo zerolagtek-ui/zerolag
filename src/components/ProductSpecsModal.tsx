@@ -17,9 +17,12 @@ export function ProductSpecsModal({ product, onClose }: { product: Product | nul
   const images = product.galleryImages || [product.image];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in overflow-y-auto"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       
-      <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-lime-500/30 rounded-3xl overflow-hidden shadow-2xl my-8 text-slate-900 dark:text-white">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-lime-500/30 rounded-3xl overflow-hidden shadow-2xl my-8 text-slate-900 dark:text-white z-[95]">
         
         {/* Close Button */}
         <button

@@ -105,10 +105,20 @@ export function AiAssistantDrawer() {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+    <div className="fixed inset-0 z-[80] overflow-hidden">
+      {/* Dark Backdrop Overlay */}
+      <div
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 cursor-pointer animate-fade-in"
+        onClick={() => setIsAiOpen(false)}
+        aria-hidden="true"
+      />
+
+      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10 z-[85]">
         
-        <div className="w-screen max-w-lg bg-[#0c0e14] border-l border-zinc-800 text-white flex flex-col shadow-2xl transition-colors">
+        <div
+          className="w-screen max-w-lg bg-[#0c0e14] border-l border-zinc-800 text-white flex flex-col shadow-2xl transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
           
           {/* Top Bar */}
           <div className="p-4 md:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
