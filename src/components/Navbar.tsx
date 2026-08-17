@@ -12,7 +12,7 @@ import {
   cleanLogoUrl,
   getStoredProducts
 } from '@/lib/storeManager';
-import { formatPrice } from '@/lib/productsData';
+import { formatPrice, getProductSlug } from '@/lib/productsData';
 import {
   ShoppingBag,
   Bot,
@@ -217,8 +217,8 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     };
   }, []);
 
-  // Live matching search results (across name, brand, category, description)
-  const matchingProducts = inputVal.trim()
+  // Live matching search results when typing 2+ characters
+  const matchingProducts = inputVal.trim().length >= 2
     ? products.filter((p) => {
         const q = inputVal.toLowerCase().trim();
         const nameMatch = (p.name || '').toLowerCase().includes(q);
@@ -232,7 +232,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
   const handleInputChange = (val: string) => {
     setInputVal(val);
     if (onSearchChange) onSearchChange(val);
-    setIsDropdownOpen(val.trim().length > 0);
+    setIsDropdownOpen(val.trim().length >= 2);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -324,7 +324,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
                 placeholder="Search mice, mechanical keyboards, routers..."
                 value={inputVal}
                 onChange={(e) => handleInputChange(e.target.value)}
-                onFocus={() => setIsDropdownOpen(inputVal.trim().length > 0)}
+                onFocus={() => setIsDropdownOpen(inputVal.trim().length >= 2)}
                 className="w-full bg-zinc-900 border border-zinc-700/80 rounded-full py-2.5 pl-11 pr-10 text-xs lg:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 focus:ring-1 focus:ring-lime-400/50 transition-all font-mono"
               />
               <button
@@ -345,56 +345,67 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
               )}
             </form>
 
-            {/* Desktop Autocomplete Dropdown */}
-            {isDropdownOpen && inputVal.trim().length > 0 && (
+            {/* Desktop Instant Search Dropdown */}
+            {isDropdownOpen && inputVal.trim().length >= 2 && (
               <div className="absolute left-0 right-0 top-full mt-2 bg-[#0a0c10] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 font-mono text-xs animate-in fade-in duration-150">
-                <div className="p-3 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400 font-bold uppercase">
-                    Matching Hardware ({matchingProducts.length})
+                <div className="p-3 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between text-[11px]">
+                  <span className="text-lime-400 font-bold uppercase tracking-wider">
+                    Matching Products ({matchingProducts.length})
                   </span>
                   <span className="text-[10px] text-zinc-500">ESC to close</span>
                 </div>
 
                 {matchingProducts.length > 0 ? (
-                  <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800/40">
-                    {matchingProducts.slice(0, 5).map((prod) => (
-                      <Link
-                        key={prod.id}
-                        href={`/product/${prod.id}`}
-                        onClick={() => {
-                          setIsDropdownOpen(false);
-                          if (onSearchChange) onSearchChange('');
-                          setInputVal('');
-                        }}
-                        className="p-3 flex items-center gap-3 hover:bg-lime-400/10 transition-colors group cursor-pointer"
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
-                          {prod.image ? (
-                            <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
-                          ) : (
-                            <Package className="w-5 h-5 text-zinc-600" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white font-bold block truncate group-hover:text-lime-400 transition-colors">
-                            {prod.name}
-                          </span>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
-                              {prod.category}
-                            </span>
-                            {prod.brand && <span className="text-[10px] text-zinc-400">{prod.brand}</span>}
+                  <div className="max-h-80 overflow-y-auto divide-y divide-zinc-800/40">
+                    {matchingProducts.slice(0, 5).map((prod) => {
+                      const slug = getProductSlug(prod);
+                      return (
+                        <Link
+                          key={prod.id}
+                          href={`/product/${slug}`}
+                          onClick={() => {
+                            setIsDropdownOpen(false);
+                            if (onSearchChange) onSearchChange('');
+                            setInputVal('');
+                          }}
+                          className="p-3 flex items-center gap-3 hover:bg-lime-400/10 transition-colors group cursor-pointer"
+                        >
+                          <div className="w-11 h-11 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center shrink-0 overflow-hidden relative">
+                            {prod.image ? (
+                              <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
+                            ) : (
+                              <Package className="w-5 h-5 text-zinc-600" />
+                            )}
                           </div>
-                        </div>
-                        <span className="text-lime-400 font-bold shrink-0">
-                          {formatPrice(prod.priceLkr)}
-                        </span>
-                      </Link>
-                    ))}
+                          <div className="flex-1 min-w-0">
+                            <span className="text-white font-bold block truncate group-hover:text-lime-400 transition-colors">
+                              {prod.name}
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px]">
+                              {prod.brand && <span className="text-zinc-400">{prod.brand}</span>}
+                              {prod.inStock ? (
+                                <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                  In Stock
+                                </span>
+                              ) : (
+                                <span className="text-rose-400 flex items-center gap-1 font-semibold">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                                  Out of Stock
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-lime-400 font-bold font-mono text-xs shrink-0">
+                            {formatPrice(prod.priceLkr)}
+                          </span>
+                        </Link>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="p-4 text-center text-zinc-500 text-xs">
-                    No hardware matching "{inputVal}"
+                  <div className="p-5 text-center text-zinc-500 text-xs">
+                    No hardware products matching "{inputVal}"
                   </div>
                 )}
 
@@ -402,7 +413,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
                   onClick={handleSearchSubmit}
                   className="w-full p-3 bg-zinc-950 hover:bg-zinc-900 border-t border-zinc-800 text-lime-400 font-bold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <span>View all results for "{inputVal}"</span>
+                  <span>Search all results for "{inputVal}"</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -518,7 +529,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
                 placeholder="Search hardware, mice, keyboards..."
                 value={inputVal}
                 onChange={(e) => handleInputChange(e.target.value)}
-                onFocus={() => setIsDropdownOpen(inputVal.trim().length > 0)}
+                onFocus={() => setIsDropdownOpen(inputVal.trim().length >= 2)}
                 className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl py-2.5 pl-10 pr-8 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 font-mono"
               />
               <Search className="w-4 h-4 text-lime-400 absolute left-3.5 top-3" />
@@ -534,47 +545,57 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
             </form>
 
             {/* Mobile Autocomplete Dropdown */}
-            {isDropdownOpen && inputVal.trim().length > 0 && (
+            {isDropdownOpen && inputVal.trim().length >= 2 && (
               <div className="absolute left-0 right-0 top-full mt-2 bg-[#0a0c10] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 font-mono text-xs">
-                <div className="p-3 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400 font-bold uppercase">
-                    Matching Hardware ({matchingProducts.length})
+                <div className="p-3 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between text-[11px]">
+                  <span className="text-lime-400 font-bold uppercase tracking-wider">
+                    Matching Products ({matchingProducts.length})
                   </span>
                   <span className="text-[10px] text-zinc-500">ESC to close</span>
                 </div>
 
                 {matchingProducts.length > 0 ? (
                   <div className="max-h-60 overflow-y-auto divide-y divide-zinc-800/40">
-                    {matchingProducts.slice(0, 5).map((prod) => (
-                      <Link
-                        key={prod.id}
-                        href={`/product/${prod.id}`}
-                        onClick={() => {
-                          setIsDropdownOpen(false);
-                          setMobileMenuOpen(false);
-                          if (onSearchChange) onSearchChange('');
-                          setInputVal('');
-                        }}
-                        className="p-3 flex items-center gap-3 hover:bg-lime-400/10 transition-colors"
-                      >
-                        <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
-                          {prod.image ? (
-                            <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
-                          ) : (
-                            <Package className="w-4 h-4 text-zinc-600" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white font-bold block truncate text-xs">
-                            {prod.name}
+                    {matchingProducts.slice(0, 5).map((prod) => {
+                      const slug = getProductSlug(prod);
+                      return (
+                        <Link
+                          key={prod.id}
+                          href={`/product/${slug}`}
+                          onClick={() => {
+                            setIsDropdownOpen(false);
+                            setMobileMenuOpen(false);
+                            if (onSearchChange) onSearchChange('');
+                            setInputVal('');
+                          }}
+                          className="p-3 flex items-center gap-3 hover:bg-lime-400/10 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center shrink-0 overflow-hidden relative">
+                            {prod.image ? (
+                              <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
+                            ) : (
+                              <Package className="w-4 h-4 text-zinc-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-white font-bold block truncate text-xs">
+                              {prod.name}
+                            </span>
+                            <div className="flex items-center gap-2 text-[9px] mt-0.5">
+                              {prod.brand && <span className="text-zinc-400">{prod.brand}</span>}
+                              {prod.inStock ? (
+                                <span className="text-emerald-400 font-semibold">In Stock</span>
+                              ) : (
+                                <span className="text-rose-400 font-semibold">Out of Stock</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-lime-400 font-bold text-xs shrink-0 font-mono">
+                            {formatPrice(prod.priceLkr)}
                           </span>
-                          <span className="text-[9px] text-zinc-400 block">{prod.category}</span>
-                        </div>
-                        <span className="text-lime-400 font-bold text-xs shrink-0">
-                          {formatPrice(prod.priceLkr)}
-                        </span>
-                      </Link>
-                    ))}
+                        </Link>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="p-4 text-center text-zinc-500 text-xs">

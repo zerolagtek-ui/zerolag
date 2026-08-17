@@ -4,6 +4,7 @@ import './globals.css';
 import { CartProvider } from '@/context/CartContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ScrollToTop } from '@/components/ScrollToTop';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
 
 const PAYHERE_PRELOAD_URL =
   process.env.NEXT_PUBLIC_PAYHERE_JS_URL ||
@@ -47,7 +48,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" data-scroll-behavior="smooth" suppressHydrationWarning>
-      <body className="bg-black text-slate-100 min-h-screen max-w-full overflow-x-hidden flex flex-col selection:bg-lime-400 selection:text-slate-950">
+      <body className="bg-black text-slate-100 min-h-screen max-w-full overflow-x-hidden flex flex-col selection:bg-lime-400 selection:text-slate-950 pb-16 md:pb-0">
         <Script
           id="payhere-sdk"
           src={PAYHERE_PRELOAD_URL}
@@ -56,6 +57,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange enableSystem={false}>
           <CartProvider>
             {children}
+            <MobileBottomNav />
             <ScrollToTop />
           </CartProvider>
         </ThemeProvider>

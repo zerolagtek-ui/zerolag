@@ -7,7 +7,7 @@ import { Product } from '@/types';
 import { useCart } from '@/context/CartContext';
 import { formatPrice, getProductSlug } from '@/lib/productsData';
 import Image from 'next/image';
-import { Star, ShoppingCart, Eye, ShieldCheck } from 'lucide-react';
+import { Star, ShoppingCart, Eye, ShieldCheck, Check } from 'lucide-react';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600';
 
@@ -16,6 +16,7 @@ export function ProductCard({ product }: { product: Product }) {
   const productSlug = getProductSlug(product);
 
   const [imgSrc, setImgSrc] = useState<string>(product.image || FALLBACK_IMAGE);
+  const [isAdded, setIsAdded] = useState(false);
 
   useEffect(() => {
     setImgSrc(product.image || FALLBACK_IMAGE);
@@ -24,28 +25,54 @@ export function ProductCard({ product }: { product: Product }) {
   const sellingPrice = Number(product.priceLkr ?? product.price ?? 0);
   const origPriceVal = Number(product.originalPriceLkr ?? product.originalPrice ?? product.original_price ?? 0);
   const showDiscount = !isNaN(origPriceVal) && origPriceVal > 0 && origPriceVal > sellingPrice;
+  const discountPct = showDiscount ? Math.round(((origPriceVal - sellingPrice) / origPriceVal) * 100) : 0;
+
+  const stockCountNum = Number(product.stockCount ?? 0);
+  const isOutOfStock = !product.inStock || stockCountNum <= 0;
+  const isLowStock = product.inStock && stockCountNum > 0 && stockCountNum <= 3;
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isOutOfStock) return;
+
+    addToCart(product);
+    setIsAdded(true);
+    setTimeout(() => {
+      setIsAdded(false);
+    }, 1200);
+  };
 
   return (
-    <div className="group relative rounded-2xl bg-[#0a0c10] border border-zinc-800 text-white shadow-sm hover:shadow-md hover:border-lime-500/50 p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1">
+    <div className="group relative rounded-2xl bg-[#0a0c10] border border-zinc-800 text-white shadow-sm hover:border-lime-500/40 hover:shadow-[0_0_25px_rgba(163,230,53,0.15)] p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1">
 
-      {/* Badge Overlay */}
-      {product.badge && (
+      {/* Badge Overlay - Discount % or custom badge */}
+      {showDiscount && discountPct > 0 ? (
+        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 px-2 py-0.5 sm:py-1 rounded-md bg-gradient-to-r from-amber-400 via-rose-500 to-red-500 text-slate-950 font-black text-[9px] sm:text-[10px] tracking-wider uppercase shadow-lg shadow-rose-500/20 pointer-events-none flex items-center gap-0.5">
+          <span>-{discountPct}% OFF</span>
+        </div>
+      ) : product.badge ? (
         <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md bg-gradient-to-r from-lime-400 to-emerald-400 text-slate-950 font-extrabold text-[8px] sm:text-[10px] tracking-wider uppercase shadow-md pointer-events-none">
           {product.badge}
         </div>
-      )}
+      ) : null}
 
       {/* Stock Status Pill */}
       <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 pointer-events-none">
-        {product.inStock ? (
-          <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-zinc-950/80 backdrop-blur-sm border border-emerald-500/40 text-emerald-400 text-[8px] sm:text-[10px] font-mono font-medium flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="hidden sm:inline">In Stock ({product.stockCount})</span>
-            <span className="sm:hidden">Stock</span>
+        {isOutOfStock ? (
+          <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-rose-950/90 backdrop-blur-sm border border-rose-500/50 text-rose-300 text-[8px] sm:text-[10px] font-mono font-bold">
+            Out of Stock
+          </span>
+        ) : isLowStock ? (
+          <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-950/90 backdrop-blur-sm border border-amber-500/60 text-amber-400 text-[8px] sm:text-[10px] font-mono font-bold flex items-center gap-1 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            <span>Only {stockCountNum} left</span>
           </span>
         ) : (
-          <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-zinc-950/80 backdrop-blur-sm border border-rose-500/40 text-rose-400 text-[8px] sm:text-[10px] font-mono">
-            Out
+          <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-zinc-950/80 backdrop-blur-sm border border-emerald-500/40 text-emerald-400 text-[8px] sm:text-[10px] font-mono font-medium flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline">In Stock ({stockCountNum})</span>
+            <span className="sm:hidden">Stock</span>
           </span>
         )}
       </div>
@@ -66,15 +93,28 @@ export function ProductCard({ product }: { product: Product }) {
               setImgSrc(FALLBACK_IMAGE);
             }
           }}
-          className="object-contain p-3 group-hover/img:scale-105 transition-transform duration-300"
+          className={`object-contain p-3 group-hover/img:scale-105 transition-transform duration-300 ${
+            isOutOfStock ? 'grayscale opacity-50' : ''
+          }`}
         />
 
-        <div className="absolute inset-0 bg-slate-950/60 opacity-0 sm:group-hover/img:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-          <span className="px-3.5 py-2 rounded-xl bg-slate-900 border border-lime-400/60 text-lime-300 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-lime-400/20">
-            <Eye className="w-4 h-4 text-lime-400" />
-            <span>View Product</span>
-          </span>
-        </div>
+        {/* Desaturated Out of Stock Overlay */}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+            <span className="px-3 py-1 rounded-lg bg-zinc-900/90 border border-zinc-700 text-zinc-300 font-mono text-[10px] font-bold uppercase tracking-widest">
+              Sold Out
+            </span>
+          </div>
+        )}
+
+        {!isOutOfStock && (
+          <div className="absolute inset-0 bg-slate-950/60 opacity-0 sm:group-hover/img:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+            <span className="px-3.5 py-2 rounded-xl bg-slate-900 border border-lime-400/60 text-lime-300 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-lime-400/20">
+              <Eye className="w-4 h-4 text-lime-400" />
+              <span>View Product</span>
+            </span>
+          </div>
+        )}
       </Link>
 
       {/* Content */}
@@ -106,7 +146,7 @@ export function ProductCard({ product }: { product: Product }) {
             </Link>
           </h3>
 
-          {/* Specs Highlights - Hidden on mobile for clean 2-column layout */}
+          {/* Specs Highlights */}
           {product.specs && (
             <div className="hidden sm:flex flex-wrap gap-1.5 mt-2.5">
               {Object.entries(product.specs).slice(0, 2).map(([key, val]) => (
@@ -147,13 +187,24 @@ export function ProductCard({ product }: { product: Product }) {
               <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </Link>
             <button
-              onClick={() => addToCart(product)}
-              disabled={!product.inStock}
-              className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold hover:shadow-lg hover:shadow-lime-400/25 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all"
+              onClick={handleAddToCart}
+              disabled={isOutOfStock}
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl font-extrabold flex items-center gap-1 transition-all transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${
+                isAdded
+                  ? 'bg-emerald-400 text-slate-950 scale-105 shadow-md shadow-emerald-400/30'
+                  : 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 hover:shadow-lg hover:shadow-lime-400/25 hover:scale-105'
+              }`}
               aria-label={`Add ${product.name} to cart`}
-              title="Add to Cart"
+              title={isAdded ? 'Added to Cart!' : 'Add to Cart'}
             >
-              <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              {isAdded ? (
+                <>
+                  <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
+                  <span className="text-[10px] sm:text-xs font-mono hidden xs:inline">Added!</span>
+                </>
+              ) : (
+                <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              )}
             </button>
           </div>
         </div>

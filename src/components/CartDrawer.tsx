@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { formatPrice, getProductSlug } from '@/lib/productsData';
-import { X, Trash2, ShoppingBag, ArrowRight, Tag, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Trash2, ShoppingBag, ArrowRight, Tag, CheckCircle2, AlertCircle, Truck } from 'lucide-react';
 
 export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () => void }) {
   const {
@@ -51,6 +51,8 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
   };
 
   const subtotalLkr = cart.reduce((sum, item) => sum + item.product.priceLkr * item.quantity, 0);
+  const deliveryFee = 400;
+  const estimatedTotal = (totalPriceLkr || subtotalLkr - discountAmountLkr) + deliveryFee;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/70 backdrop-blur-sm animate-fade-in">
@@ -146,9 +148,9 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
             )}
           </div>
 
-          {/* Footer Summary & Checkout */}
+          {/* Sticky Footer Summary & Checkout CTA */}
           {cart.length > 0 && (
-            <div className="p-6 border-t border-zinc-800 bg-zinc-950 space-y-4">
+            <div className="p-4 sm:p-6 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md space-y-4 shrink-0 shadow-lg">
               
               {/* Promo Code Input or Active Promo Badge */}
               {appliedPromo ? (
@@ -197,11 +199,11 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                 </form>
               )}
 
-              {/* Price Calculation */}
-              <div className="space-y-1.5 font-mono text-xs text-zinc-400 pt-2 border-t border-zinc-800/80">
+              {/* Price Calculation Breakdown */}
+              <div className="space-y-2 font-mono text-xs text-zinc-400 pt-2 border-t border-zinc-800/80">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span className="text-zinc-200">{formatPrice(subtotalLkr)}</span>
+                  <span className="text-zinc-200 font-semibold">{formatPrice(subtotalLkr)}</span>
                 </div>
                 {discountAmountLkr > 0 && (
                   <div className="flex justify-between text-emerald-400 font-bold">
@@ -209,26 +211,32 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                     <span>-{formatPrice(discountAmountLkr)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-zinc-400">
-                  <span>Islandwide Delivery:</span>
-                  <span className="text-zinc-200 font-semibold">{formatPrice(400)}</span>
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-lime-400" />
+                    <span>Islandwide Delivery:</span>
+                  </span>
+                  <span className="text-zinc-200 font-bold">Rs. 400</span>
                 </div>
-                <div className="flex justify-between text-base font-extrabold text-white pt-2 border-t border-zinc-800">
+                <div className="flex justify-between items-baseline text-sm sm:text-base font-extrabold text-white pt-2.5 border-t border-zinc-800">
                   <span>Estimated Total:</span>
-                  <span className="text-lime-400 font-mono">{formatPrice(totalPriceLkr + 400)}</span>
+                  <span className="text-lime-400 font-mono text-base sm:text-lg">{formatPrice(estimatedTotal)}</span>
                 </div>
               </div>
 
-              {/* Checkout Button */}
+              {/* High-Contrast Sticky Checkout Action CTA */}
               <button
                 onClick={() => {
                   setIsCartOpen(false);
                   if (onProceedToCheckout) onProceedToCheckout();
                 }}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/25 hover:scale-[1.01] active:scale-95 transition-all"
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-lime-400 via-emerald-400 to-emerald-500 text-slate-950 font-extrabold text-xs sm:text-sm flex items-center justify-between shadow-xl shadow-lime-400/25 hover:shadow-lime-400/40 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer border border-lime-300/40"
               >
                 <span>Proceed to Checkout</span>
-                <ArrowRight className="w-4 h-4" />
+                <div className="flex items-center gap-1.5 font-mono">
+                  <span className="font-bold">{formatPrice(estimatedTotal)}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
               </button>
 
             </div>

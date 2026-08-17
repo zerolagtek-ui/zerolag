@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProductCard } from './ProductCard';
+import { ProductGridSkeleton } from './ProductSkeleton';
 import { Product, Category } from '@/types';
-import { getStoredProducts, getDynamicCategories, syncProductsFromSupabase } from '@/lib/storeManager';
+import { getStoredProducts, getDynamicCategories } from '@/lib/storeManager';
 import { getProductsFromSupabase, isCategoryMatch, normalizeCategory } from '@/lib/productsData';
-import { Cpu, Search, SlidersHorizontal, Check, RefreshCw, Loader2, PackageCheck, PackageX } from 'lucide-react';
+import { Cpu, Search, SlidersHorizontal, RefreshCw, Loader2, PackageCheck, PackageX } from 'lucide-react';
 
 export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCategory, initialProducts }: {
   externalSearchQuery?: string;
@@ -19,6 +20,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
     return getStoredProducts() || [];
   });
   const [categories, setCategories] = useState<Category[]>(() => getDynamicCategories() || []);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(!initialProducts || initialProducts.length === 0);
 
   useEffect(() => {
     setHasMounted(true);
@@ -45,6 +47,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
   useEffect(() => {
     if (initialProducts && initialProducts.length > 0) {
       setProducts(initialProducts);
+      setIsInitialLoading(false);
     }
   }, [initialProducts]);
 
@@ -77,6 +80,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
   useEffect(() => {
     async function loadGridProducts() {
+      setIsInitialLoading(true);
       try {
         const fetched = await getProductsFromSupabase();
         if (fetched && fetched.length > 0) {
@@ -93,6 +97,8 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         if (stored && stored.length > 0) {
           setProducts(stored);
         }
+      } finally {
+        setIsInitialLoading(false);
       }
       await fetchDynamicCategories();
     }
@@ -212,7 +218,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
           <div className="flex items-center gap-3 text-xs font-mono text-zinc-400">
             <span suppressHydrationWarning>
-              {mounted ? `Showing ${visibleProducts.length} of ${filteredProducts.length} items` : 'Loading items...'}
+              {mounted && !isInitialLoading ? `Showing ${visibleProducts.length} of ${filteredProducts.length} items` : 'Loading items...'}
             </span>
           </div>
         </div>
@@ -298,8 +304,10 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
 
         </div>
 
-        {/* Main Product Cards Grid */}
-        {visibleProducts.length > 0 ? (
+        {/* Main Product Cards Grid or Polished Loading Skeletons */}
+        {isInitialLoading || !mounted ? (
+          <ProductGridSkeleton count={8} />
+        ) : visibleProducts.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
             {visibleProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
@@ -369,7 +377,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
             </button>
           )}
 
-          {!hasMore && filteredProducts.length > 0 && (
+          {!hasMore && filteredProducts.length > 0 && !isInitialLoading && (
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-500 text-xs font-mono">
               <PackageCheck className="w-4 h-4 text-emerald-500" />
               <span>You&apos;ve reached the end of the catalog ({filteredProducts.length} items)</span>
