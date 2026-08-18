@@ -3,6 +3,15 @@ import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb';
 import Product from '@/models/Product';
 import Category from '@/models/Category';
 
+function formatUrlSlug(value: string): string {
+  if (!value) return '';
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-') // Replace spaces and special characters with hyphens
+    .replace(/^-+|-+$/g, '');     // Trim leading and trailing hyphens
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://zerolagtek.app').replace(/\/$/, '');
 
@@ -20,20 +29,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (isMongoConfigured()) {
       await connectToDatabase();
       const products = await Product.find({}, 'slug updatedAt id _id').lean();
-      const productRoutes: MetadataRoute.Sitemap = products.map((p: any) => ({
-        url: `${baseUrl}/product/${p.slug || p.id || p._id}`,
-        lastModified: p.updatedAt ? new Date(p.updatedAt) : new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.8,
-      }));
+      const productRoutes: MetadataRoute.Sitemap = products
+        .map((p: any) => {
+          const rawIdentifier = p.slug || p.id || String(p._id);
+          const safeSlug = formatUrlSlug(rawIdentifier) || encodeURIComponent(String(rawIdentifier).trim());
 
-      const categories = await Category.find({}, 'slug updatedAt').lean();
-      const categoryRoutes: MetadataRoute.Sitemap = categories.map((c: any) => ({
-        url: `${baseUrl}/products?category=${c.slug}`,
-        lastModified: c.updatedAt ? new Date(c.updatedAt) : new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.7,
-      }));
+          if (!safeSlug) return null;
+
+          return {
+            url: `${baseUrl}/product/${safeSlug}`,
+            lastModified: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+            changeFrequency: 'weekly' as const,
+            priority: 0.8,
+          };
+        })
+        .filter(Boolean) as MetadataRoute.Sitemap;
+
+      const categories = await Category.find({}, 'slug name updatedAt').lean();
+      const categoryRoutes: MetadataRoute.Sitemap = categories
+        .map((c: any) => {
+          const safeCategorySlug = formatUrlSlug(c.slug || c.name);
+          if (!safeCategorySlug) return null;
+
+          return {
+            url: `${baseUrl}/products?category=${safeCategorySlug}`,
+            lastModified: c.updatedAt ? new Date(c.updatedAt) : new Date(),
+            changeFrequency: 'weekly' as const,
+            priority: 0.7,
+          };
+        })
+        .filter(Boolean) as MetadataRoute.Sitemap;
 
       return [...staticRoutes, ...categoryRoutes, ...productRoutes];
     }
