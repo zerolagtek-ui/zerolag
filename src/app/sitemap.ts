@@ -28,12 +28,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     if (isMongoConfigured()) {
       await connectToDatabase();
-      const products = await Product.find({}, 'slug updatedAt id _id').lean();
+      const products = await Product.find({}, 'name slug updatedAt id _id').lean();
       const productRoutes: MetadataRoute.Sitemap = products
         .map((p: any) => {
-          const rawIdentifier = p.slug || p.id || String(p._id);
-          const safeSlug = formatUrlSlug(rawIdentifier) || encodeURIComponent(String(rawIdentifier).trim());
+          // 1. Prefer existing valid slug if it is not an ID
+          let rawSlug = p.slug;
 
+          // 2. If slug is missing or is just a prod-ID, generate it from the product name
+          if (!rawSlug || rawSlug.startsWith('prod-') || rawSlug.includes('17867')) {
+            rawSlug = p.name || p.title || p.id || String(p._id);
+          }
+
+          const safeSlug = formatUrlSlug(rawSlug);
           if (!safeSlug) return null;
 
           return {
