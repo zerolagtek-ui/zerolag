@@ -95,7 +95,9 @@ export function Footer() {
                 <img
                   src={siteLogo || "/logo.png"}
                   alt="ZeroLag TEK"
-                  className="h-12 w-12 md:h-14 md:w-14 object-contain shrink-0"
+                  width={56}
+                  height={56}
+                  className="h-12 w-12 md:h-14 md:w-14 aspect-square object-contain shrink-0"
                   onError={() => setLogoError(true)}
                 />
               ) : (

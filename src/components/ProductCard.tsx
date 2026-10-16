@@ -166,19 +166,19 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
 
         {/* Pricing & Actions */}
-        <div className="pt-2 sm:pt-3 mt-2 sm:mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-1">
-          <Link href={`/product/${productSlug}`} className="cursor-pointer truncate">
-            {showDiscount && (
-              <span className="text-[9px] sm:text-[11px] text-slate-400 dark:text-zinc-500 line-through block font-mono">
-                {formatPrice(origPriceVal)}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-auto pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+          <div className="flex items-baseline gap-1.5 shrink-0">
+            <span className="text-base font-bold text-lime-600 dark:text-lime-400 whitespace-nowrap">
+              {formatPrice(product.price ?? sellingPrice)}
+            </span>
+            {((product.originalPrice && product.price && product.originalPrice > product.price) || showDiscount) && (
+              <span className="text-xs text-slate-400 line-through whitespace-nowrap">
+                {formatPrice(product.originalPrice ?? origPriceVal)}
               </span>
             )}
-            <span className="text-xs sm:text-base font-bold font-mono text-lime-600 dark:text-lime-400 truncate block">
-              {formatPrice(sellingPrice)}
-            </span>
-          </Link>
+          </div>
 
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
             <Link
               href={`/product/${productSlug}`}
               className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-800 transition-all"

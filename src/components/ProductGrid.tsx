@@ -224,7 +224,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         </div>
 
         {/* Dynamic Category Selector Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-zinc-800">
+        <div className="min-h-[48px] flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-zinc-800">
           <button
             onClick={() => handleCategoryClick('all')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all border whitespace-nowrap ${
@@ -292,6 +292,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
+                aria-label="Sort products by hardware feature or price"
                 className="bg-transparent text-[11px] sm:text-xs text-slate-800 dark:text-zinc-200 focus:outline-none"
               >
                 <option value="featured">Featured Hardware</option>
@@ -305,15 +306,16 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         </div>
 
         {/* Main Product Cards Grid or Polished Loading Skeletons */}
-        {isInitialLoading || !mounted ? (
-          <ProductGridSkeleton count={8} />
-        ) : visibleProducts.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-            {visibleProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
+        <div className="min-h-[400px]">
+          {isInitialLoading || !mounted ? (
+            <ProductGridSkeleton count={8} />
+          ) : visibleProducts.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+              {visibleProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
           <div className="p-12 text-center bg-white dark:bg-[#0a0c10] border border-slate-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
             {products.length === 0 ? (
               <>
@@ -358,6 +360,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
             )}
           </div>
         )}
+        </div>
 
         {/* Infinite Scroll Sentinel & Load More Trigger */}
         <div ref={observerRef} className="pt-8 text-center space-y-4">

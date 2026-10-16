@@ -69,7 +69,9 @@ function HomeContent() {
 
       <main className="flex-1">
         {/* Main Hero Section */}
-        <HeroBanner />
+        <div className="w-full min-h-[420px] lg:min-h-[500px]">
+          <HeroBanner />
+        </div>
 
         {/* Product Catalog Grid & Multi-Filters */}
         <ProductGrid
@@ -97,7 +99,9 @@ export default function Home() {
       <div className="min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900 dark:bg-black dark:text-white transition-colors duration-200 overflow-x-hidden">
         <Navbar />
         <main className="flex-1">
-          <HeroBanner />
+          <div className="w-full min-h-[420px] lg:min-h-[500px]">
+            <HeroBanner />
+          </div>
           <ProductGrid />
         </main>
         <Footer />

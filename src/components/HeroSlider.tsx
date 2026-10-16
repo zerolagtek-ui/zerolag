@@ -66,7 +66,26 @@ export function HeroSlider() {
     return () => clearInterval(timer);
   }, [slides.length, isPaused]);
 
-  if (slides.length === 0) return null;
+  if (slides.length === 0) {
+    return (
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 my-6">
+        <div className="relative w-full rounded-3xl overflow-hidden bg-zinc-950/90 border border-white/10 shadow-2xl min-h-[420px] lg:min-h-[500px] flex items-center justify-center animate-pulse">
+          <div className="grid grid-cols-1 lg:grid-cols-12 items-center w-full min-h-[420px] lg:min-h-[500px] p-6 sm:p-8 lg:p-12 gap-8">
+            <div className="lg:col-span-7 flex flex-col justify-center space-y-4 z-10">
+              <div className="w-32 h-6 bg-lime-500/10 border border-lime-500/20 rounded-full" />
+              <div className="w-3/4 max-w-md h-12 bg-white/10 rounded-xl" />
+              <div className="w-1/2 max-w-sm h-6 bg-white/5 rounded-lg" />
+              <div className="flex gap-3 pt-2">
+                <div className="w-36 h-12 bg-lime-400/20 rounded-xl" />
+                <div className="w-44 h-12 bg-zinc-900 rounded-xl" />
+              </div>
+            </div>
+            <div className="lg:col-span-5 flex items-center justify-center relative w-full aspect-square sm:aspect-[4/3] lg:aspect-square max-w-md mx-auto rounded-2xl bg-zinc-900/40" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const currentSlide = slides[currentIndex % slides.length];
   const featuredProduct = products.find(p => p.id === currentSlide?.featuredProductId) || products[0];
@@ -99,7 +118,7 @@ export function HeroSlider() {
       <div
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
-        className="relative w-full rounded-3xl overflow-hidden bg-zinc-950/90 border border-white/10 shadow-2xl"
+        className="relative w-full rounded-3xl overflow-hidden bg-zinc-950/90 border border-white/10 shadow-2xl min-h-[420px] lg:min-h-[500px]"
       >
         {/* Background Ambient Glows & Grid */}
         <div className="absolute top-0 right-1/3 w-96 h-96 bg-lime-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -171,7 +190,7 @@ export function HeroSlider() {
 
           {/* Right Image Column */}
           <div className="lg:col-span-5 flex items-center justify-center relative w-full h-[260px] sm:h-[320px] lg:h-full min-h-[300px] lg:min-h-[380px] z-10">
-            <div className="relative w-full max-w-md lg:max-w-lg 2xl:max-w-xl h-full min-h-[260px] lg:min-h-[360px] flex items-center justify-center">
+            <div className="relative w-full max-w-md lg:max-w-lg 2xl:max-w-xl aspect-square sm:aspect-[4/3] lg:aspect-square h-full min-h-[260px] lg:min-h-[360px] flex items-center justify-center">
               {!isImageBroken && slideImgSrc ? (
                 <Image
                   src={slideImgSrc}

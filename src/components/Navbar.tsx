@@ -303,7 +303,9 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
               <img
                 src={siteLogo || "/logo.png"}
                 alt="ZeroLag TEK"
-                className="h-11 w-11 md:h-12 md:w-12 object-contain transition-transform duration-200 group-hover:scale-105 shrink-0"
+                width={48}
+                height={48}
+                className="h-11 w-11 md:h-12 md:w-12 aspect-square object-contain transition-transform duration-200 group-hover:scale-105 shrink-0"
                 onError={() => setLogoError(true)}
               />
             )}
