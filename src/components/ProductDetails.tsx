@@ -526,7 +526,7 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
                     }
                   }}
                   disabled={!product.inStock}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 hover:from-lime-300 hover:to-emerald-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-500/25 hover:shadow-lime-500/40 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 transition-all cursor-pointer"
+                  className="w-full py-4 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 transition-all cursor-pointer"
                 >
                   <ShoppingCart className="w-5 h-5" />
                   <span>Add to Cart</span>
@@ -614,7 +614,7 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
 
             <button
               onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 text-slate-950 font-bold font-mono text-xs flex items-center gap-2 shadow-md shadow-lime-500/20 hover:scale-105 transition-all cursor-pointer self-start sm:self-auto"
+              className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-bold font-mono text-xs flex items-center gap-2 shadow-md shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer self-start sm:self-auto"
             >
               <Send className="w-4 h-4" />
               <span>{isReviewFormOpen ? '✖ Close Form' : '✍️ Write a Review'}</span>
@@ -695,7 +695,7 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
                   <button
                     type="submit"
                     disabled={submittingReview}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold flex items-center justify-center gap-2 hover:scale-[1.02] transition-all cursor-pointer shadow-md"
+                    className="px-6 py-3 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-bold flex items-center justify-center gap-2 hover:scale-[1.02] transition-all cursor-pointer shadow-md shadow-lime-400/20"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{submittingReview ? 'Submitting Review...' : 'Submit Review'}</span>

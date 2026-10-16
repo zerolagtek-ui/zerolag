@@ -134,7 +134,7 @@ export function HeroSlider() {
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <a
                 href={currentSlide?.primaryButtonLink || '#catalog'}
-                className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                className="px-6 py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
               >
                 <span>{currentSlide?.primaryButtonText || 'EXPLORE CATALOG'}</span>
                 <ArrowRight className="w-4 h-4" />

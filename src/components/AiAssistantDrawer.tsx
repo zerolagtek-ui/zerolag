@@ -123,7 +123,7 @@ export function AiAssistantDrawer() {
           {/* Top Bar */}
           <div className="p-4 md:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-lime-400 to-emerald-500 p-0.5 shadow-lg shadow-lime-400/30">
+              <div className="w-10 h-10 rounded-xl bg-lime-400 p-0.5 shadow-lg shadow-lime-400/30">
                 <div className="w-full h-full bg-zinc-950 rounded-[10px] flex items-center justify-center">
                   <Bot className="w-5 h-5 text-lime-400" />
                 </div>
@@ -160,7 +160,7 @@ export function AiAssistantDrawer() {
                 <div
                   className={`max-w-[88%] rounded-2xl p-4 text-xs leading-relaxed space-y-3 ${
                     msg.role === 'user'
-                      ? 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold rounded-br-none shadow-md shadow-lime-400/20'
+                      ? 'bg-lime-400 text-black font-bold rounded-br-none shadow-md shadow-lime-400/20'
                       : 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-bl-none shadow-sm'
                   }`}
                 >
@@ -269,7 +269,7 @@ export function AiAssistantDrawer() {
               <button
                 type="submit"
                 disabled={loading || !inputMessage.trim()}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold hover:shadow-lg hover:shadow-lime-400/20 disabled:opacity-50 transition-all flex items-center justify-center"
+                className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-bold hover:shadow-lg hover:shadow-lime-400/20 disabled:opacity-50 transition-all flex items-center justify-center cursor-pointer"
               >
                 <Send className="w-4 h-4" />
               </button>

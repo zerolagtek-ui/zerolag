@@ -972,7 +972,7 @@ export default function CheckoutPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-black font-extrabold text-sm shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform disabled:opacity-60 mt-4 cursor-pointer"
+                  className="w-full py-4 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform disabled:opacity-60 mt-4 cursor-pointer"
                 >
                   {isSubmitting ? 'Processing Order...' : `Proceed to Pay — ${formatPrice(totalAmount)}`}
                 </button>

@@ -10,32 +10,32 @@ export default function ReturnPolicyPage() {
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
       <Navbar />
 
       <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
         
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
-          <Link href="/" className="hover:text-lime-400 flex items-center gap-1">
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-zinc-400">
+          <Link href="/" className="hover:text-lime-600 dark:hover:text-lime-400 flex items-center gap-1 transition-colors">
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Storefront</span>
           </Link>
           <span>/</span>
-          <span className="text-lime-400 font-bold">Return & Refund Policy</span>
+          <span className="text-lime-600 dark:text-lime-400 font-bold">Return & Refund Policy</span>
         </div>
 
         {/* Header */}
-        <div className="space-y-3 border-b border-zinc-800 pb-6">
+        <div className="space-y-3 border-b border-slate-200 dark:border-zinc-800 pb-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-lime-400/10 border border-lime-400/30 text-lime-400">
+            <div className="p-3 rounded-2xl bg-lime-500/10 border border-lime-500/30 text-lime-600 dark:text-lime-400">
               <RotateCcw className="w-7 h-7" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-wide">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-wide">
                 Return & Refund Policy
               </h1>
-              <p className="text-xs text-zinc-400 font-mono mt-1">
+              <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono mt-1">
                 ZeroLag Tek Store Official Replacement & Guarantee Terms
               </p>
             </div>
@@ -43,12 +43,12 @@ export default function ReturnPolicyPage() {
         </div>
 
         {/* Content Section */}
-        <div className="space-y-6 text-sm text-zinc-300 leading-relaxed font-sans">
+        <div className="space-y-6 text-sm text-slate-700 dark:text-zinc-300 leading-relaxed font-sans">
           
           {/* Section 1 */}
-          <div className="bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-3">
-            <h2 className="text-base font-bold text-white font-mono flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-lime-400" />
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 space-y-3 shadow-sm">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-lime-600 dark:text-lime-400" />
               <span>1. 7-Day Replacement Policy</span>
             </h2>
             <p>
@@ -57,28 +57,28 @@ export default function ReturnPolicyPage() {
           </div>
 
           {/* Section 2 */}
-          <div className="bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-3">
-            <h2 className="text-base font-bold text-white font-mono flex items-center gap-2">
-              <Video className="w-5 h-5 text-lime-400" />
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 space-y-3 shadow-sm">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+              <Video className="w-5 h-5 text-lime-600 dark:text-lime-400" />
               <span>2. Mandatory Unboxing Video Requirement</span>
             </h2>
             <p>
               To protect against courier transit damages or missing components, customers must record an uninterrupted <strong>unboxing video</strong> from parcel opening until the product is powered on.
             </p>
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-mono flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
               <p>Claims for physical transit damage or missing in-box accessories submitted without unboxing video proof will not be accepted.</p>
             </div>
           </div>
 
           {/* Section 3 */}
-          <div className="bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-3">
-            <h2 className="text-base font-bold text-white font-mono flex items-center gap-2">
-              <PackageCheck className="w-5 h-5 text-lime-400" />
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 space-y-3 shadow-sm">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+              <PackageCheck className="w-5 h-5 text-lime-600 dark:text-lime-400" />
               <span>3. Return Packaging Requirements</span>
             </h2>
             <p>For return eligibility, the item must meet the following criteria:</p>
-            <ul className="list-disc list-inside space-y-1 text-xs font-mono text-zinc-400 pl-2">
+            <ul className="list-disc list-inside space-y-1 text-xs font-mono text-slate-600 dark:text-zinc-400 pl-2">
               <li>Original intact outer packaging and internal protective padding.</li>
               <li>Undamaged serial number sticker and manufacturer seals.</li>
               <li>All bundled accessories, manuals, dongles, and cables included.</li>
@@ -87,9 +87,9 @@ export default function ReturnPolicyPage() {
           </div>
 
           {/* Section 4 */}
-          <div className="bg-[#0a0c10] border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-4">
-            <h2 className="text-base font-bold text-white font-mono flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-lime-400" />
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 space-y-4 shadow-sm">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-lime-600 dark:text-lime-400" />
               <span>4. How to Submit a Claim</span>
             </h2>
             <p>
@@ -101,22 +101,22 @@ export default function ReturnPolicyPage() {
                 href={`https://wa.me/${whatsappNumber}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center gap-3"
+                className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center gap-3"
               >
                 <MessageSquare className="w-6 h-6 shrink-0" />
                 <div>
-                  <span className="font-bold block text-white">WhatsApp Support</span>
+                  <span className="font-bold block text-slate-900 dark:text-white">WhatsApp Support</span>
                   <span>+{whatsappNumber}</span>
                 </div>
               </a>
 
               <a
                 href="mailto:sales@zerolag.lk"
-                className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-colors flex items-center gap-3"
+                className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/20 transition-colors flex items-center gap-3"
               >
                 <ShieldCheck className="w-6 h-6 shrink-0" />
                 <div>
-                  <span className="font-bold block text-white">Email Warranty Desk</span>
+                  <span className="font-bold block text-slate-900 dark:text-white">Email Warranty Desk</span>
                   <span>sales@zerolag.lk</span>
                 </div>
               </a>

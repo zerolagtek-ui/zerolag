@@ -754,7 +754,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     }
   };
 
-  // Cloudinary Upload Handler (Shared)
+  // Image Upload Handler (Cloudinary with local/data URL fallback)
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     target: 'product' | 'product_image2' | 'product_image3' | 'product_image4' | 'slide' | 'logo'
@@ -763,8 +763,14 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setUploadError('Please select a valid image file (PNG, JPG, WEBP).');
+    if (!file.type.startsWith('image/') && !file.name.toLowerCase().endsWith('.svg')) {
+      setUploadError('Please select a valid image file (PNG, JPG, WEBP, SVG).');
+      return;
+    }
+
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setUploadError(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 5MB maximum limit. Please select a smaller file.`);
       return;
     }
 
@@ -774,6 +780,8 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('target', target);
+      formData.append('type', target);
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -782,7 +790,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
       const data = await res.json();
 
-      if (res.ok && data.url && data.url.startsWith('http')) {
+      if (res.ok && data.url) {
         const cleanedUrl = cleanLogoUrl(data.url);
         if (target === 'product') {
           setProductForm((prev) => ({ ...prev, image: data.url }));
@@ -799,13 +807,16 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
           if (typeof window !== 'undefined') {
             localStorage.setItem('temp_uploaded_logo', cleanedUrl);
           }
+          saveSiteLogo(cleanedUrl);
+          setLogoNotice(true);
+          setTimeout(() => setLogoNotice(false), 4000);
         }
       } else {
-        throw new Error(data.error || 'Failed to obtain hosted Cloudinary URL.');
+        throw new Error(data.error || 'Failed to upload image. Please try again.');
       }
     } catch (err: unknown) {
-      console.error('Cloudinary Upload Error:', err);
-      const message = err instanceof Error ? err.message : 'Image upload failed. Ensure Cloudinary keys are set.';
+      console.error('Image Upload Error:', err);
+      const message = err instanceof Error ? err.message : 'Image upload failed. Please try again.';
       setUploadError(message);
     } finally {
       setUploading(false);
@@ -1372,7 +1383,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm hover:scale-[1.01] transition-transform shadow-lg shadow-lime-400/20 disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm hover:scale-[1.01] transition-transform shadow-lg shadow-lime-400/20 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isLoggingIn ? (
                 <>
@@ -1780,7 +1791,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
                 <button
                   onClick={openCreateProductModal}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Product Item</span>
@@ -2064,7 +2075,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                       </button>
                       <button
                         type="submit"
-                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold flex items-center gap-2 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer shadow-lg shadow-lime-400/20"
+                        className="px-5 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold flex items-center gap-2 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer shadow-lg shadow-lime-400/20"
                       >
                         <span>Confirm & Send Email</span>
                         <ArrowRight className="w-4 h-4" />
@@ -2091,7 +2102,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
               <button
                 onClick={openCreateSlideModal}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform"
+                className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Hero Slide</span>
@@ -2191,7 +2202,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
               <button
                 onClick={openCreateCategoryModal}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform"
+                className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-lime-400/20 hover:scale-[1.02] transition-transform cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Category</span>
@@ -2411,7 +2422,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform"
+                className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Bank Configuration</span>
@@ -2500,7 +2511,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
             <button
               onClick={handleSaveShippingRates}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-all cursor-pointer"
+              className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-all cursor-pointer"
             >
               <span>Save Shipping Rates Configuration</span>
             </button>
@@ -2526,6 +2537,13 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
               </div>
             )}
 
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSaveSiteLogo} className="space-y-4 font-mono text-xs">
               <div>
                 <label className="block text-zinc-400 mb-1 font-bold">Logo Image URL or Google Drive Link</label>
@@ -2541,33 +2559,56 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                 </p>
               </div>
 
-              {/* Cloudinary Image Upload for Logo */}
-<div>
+              {/* Upload Logo Image */}
+              <div>
                 <label className="block text-zinc-400 mb-1 font-bold">Upload Logo Image</label>
-                <label className="flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-lime-400 text-zinc-300 hover:text-white cursor-pointer transition-colors">
-                  <Upload className="w-4 h-4 text-lime-400" />
-                  <span>Select Image File (PNG, SVG, WEBP, JPG)</span>
-                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'logo')} className="hidden" />
+                <label className={`flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 border ${uploading ? 'border-zinc-800 opacity-70 cursor-not-allowed' : 'border-zinc-700 hover:border-lime-400 cursor-pointer'} text-zinc-300 hover:text-white transition-colors`}>
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 text-lime-400 animate-spin" />
+                      <span>Uploading & Processing Logo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 text-lime-400" />
+                      <span>Select Image File (PNG, SVG, WEBP, JPG)</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*,.svg"
+                    disabled={uploading}
+                    onChange={(e) => handleImageUpload(e, 'logo')}
+                    className="hidden"
+                  />
                 </label>
               </div>
 
               {/* Live Logo Preview */}
               {siteLogoInput && (
-                <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
-                  <span className="text-[10px] text-zinc-400 uppercase font-bold block">Live Logo Preview</span>
-                  <div className="w-16 h-16 rounded-xl bg-zinc-900 border border-zinc-800 p-2 flex items-center justify-center overflow-hidden shadow-md">
+                <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
+                  <span className="text-[10px] text-zinc-400 uppercase font-bold block">Live Header Preview</span>
+                  <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900 border border-zinc-800 w-fit">
                     <img
                       src={cleanLogoUrl(siteLogoInput)}
                       alt="Logo Preview"
-                      className="w-full h-full object-contain"
+                      className="h-9 w-9 object-contain"
                     />
+                    <div className="flex items-center gap-1.5 font-bold tracking-tight text-xl">
+                      <span className="text-white">
+                        ZeroLag
+                      </span>
+                      <span className="bg-emerald-500/20 text-emerald-400 text-xs px-1.5 py-0.5 rounded border border-emerald-500/30 uppercase tracking-wider font-mono">
+                        TEK
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform cursor-pointer"
+                className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-transform cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Site Logo</span>
@@ -2587,7 +2628,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
 
               <button
                 onClick={() => openPromoModal()}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold font-mono text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer self-start sm:self-auto"
+                className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-bold font-mono text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Promo Code</span>
@@ -2971,7 +3012,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
               </div>
 
               <div>
-                <button type="submit" disabled={uploading} className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm">
+                <button type="submit" disabled={uploading} className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm cursor-pointer shadow-lg shadow-lime-400/20">
                   {editingProduct ? 'Update Store Item' : 'Publish Product Item'}
                 </button>
               </div>
@@ -3072,7 +3113,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
               </div>
 
               <div>
-                <button type="submit" className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm">
+                <button type="submit" className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm cursor-pointer shadow-lg shadow-lime-400/20">
                   {editingSlide ? 'Update Hero Slide' : 'Save Hero Slide'}
                 </button>
               </div>
@@ -3130,7 +3171,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
               </div>
 
               <div>
-                <button type="submit" className="w-full py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm">
+                <button type="submit" className="w-full py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm cursor-pointer shadow-lg shadow-lime-400/20">
                   {editingCategory ? 'Update Category' : 'Save Category'}
                 </button>
               </div>
@@ -3272,7 +3313,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                 <button
                   type="submit"
                   disabled={promoSaving}
-                  className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-all cursor-pointer"
+                  className="flex-1 py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 hover:scale-[1.01] transition-all cursor-pointer"
                 >
                   {promoSaving ? 'Saving Promo Code...' : editingPromo ? 'Update Promo Code' : 'Create Promo Code'}
                 </button>

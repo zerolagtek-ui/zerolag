@@ -52,7 +52,7 @@ export function ProductCard({ product }: { product: Product }) {
           <span>-{discountPct}% OFF</span>
         </div>
       ) : product.badge ? (
-        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md bg-gradient-to-r from-lime-400 to-emerald-400 text-slate-950 font-extrabold text-[8px] sm:text-[10px] tracking-wider uppercase shadow-md pointer-events-none">
+        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md bg-lime-400 text-black font-extrabold text-[8px] sm:text-[10px] tracking-wider uppercase shadow-md shadow-lime-400/20 pointer-events-none">
           {product.badge}
         </div>
       ) : null}
@@ -192,7 +192,7 @@ export function ProductCard({ product }: { product: Product }) {
               className={`px-2.5 sm:px-3 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl font-extrabold flex items-center gap-1 transition-all transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${
                 isAdded
                   ? 'bg-emerald-500 text-white scale-105 shadow-md shadow-emerald-500/30'
-                  : 'bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 hover:shadow-lg hover:shadow-lime-400/25 hover:scale-105'
+                  : 'bg-lime-400 hover:bg-lime-300 text-black hover:shadow-lg hover:shadow-lime-400/25 hover:scale-105'
               }`}
               aria-label={`Add ${product.name} to cart`}
               title={isAdded ? 'Added to Cart!' : 'Add to Cart'}

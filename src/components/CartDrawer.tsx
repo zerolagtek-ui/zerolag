@@ -242,7 +242,7 @@ export function CartDrawer({ onProceedToCheckout }: { onProceedToCheckout?: () =
                   setIsCartOpen(false);
                   if (onProceedToCheckout) onProceedToCheckout();
                 }}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 text-slate-950 font-extrabold text-xs sm:text-sm flex items-center justify-between shadow-xl shadow-lime-500/25 hover:shadow-lime-500/40 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer border border-lime-300/40"
+                className="w-full py-3.5 px-4 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs sm:text-sm flex items-center justify-between shadow-xl shadow-lime-400/25 hover:shadow-lime-400/40 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer border border-lime-300/40"
               >
                 <span>Proceed to Checkout</span>
                 <div className="flex items-center gap-1.5 font-mono">

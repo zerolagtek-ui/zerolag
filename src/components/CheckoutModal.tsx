@@ -615,7 +615,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <div className="pt-3 flex justify-end">
                   <button
                     type="submit"
-                    className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 hover:from-lime-300 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-500/25 hover:shadow-lime-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer"
+                    className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer"
                   >
                     <span>Continue to Delivery Courier</span>
                     <ArrowRight className="w-4 h-4" />
@@ -717,7 +717,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                   <button
                     type="button"
                     onClick={goToStep3}
-                    className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 hover:from-lime-300 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-lime-500/25 hover:shadow-lime-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer"
+                    className="px-6 py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer"
                   >
                     <span>Continue to Payment & Summary</span>
                     <ArrowRight className="w-4 h-4" />
@@ -955,7 +955,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="flex-1 sm:flex-initial px-8 py-3.5 rounded-xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 hover:from-lime-300 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-500/25 hover:shadow-lime-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-60 cursor-pointer"
+                    className="flex-1 sm:flex-initial px-8 py-3.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-60 cursor-pointer"
                   >
                     <span>{isSubmitting ? 'Processing Order...' : `Proceed to Pay — ${formatPrice(grandTotal)}`}</span>
                     <ArrowRight className="w-4 h-4" />

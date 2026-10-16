@@ -274,7 +274,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-white/95 dark:bg-black/90 text-slate-900 dark:text-white border-b border-slate-200 dark:border-zinc-800 transition-colors shadow-sm">
       
       {/* Top Banner Notice & Direct WhatsApp CTA */}
-      <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-[10px] sm:text-xs font-bold py-1 px-3 sm:px-4 text-slate-950 tracking-wider flex items-center justify-between w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+      <div className="bg-lime-400 text-[10px] sm:text-xs font-bold py-1 px-3 sm:px-4 text-black tracking-wider flex items-center justify-between w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
         <div className="hidden md:flex items-center gap-2 mx-auto uppercase truncate">
           <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
           <span className="truncate">ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
@@ -297,25 +297,24 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
       <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 w-full gap-2">
 
-          {/* Modernized Logo Section */}
-          <Link href="/" className="flex items-center group shrink-0" suppressHydrationWarning>
-            {mounted && !logoError && siteLogo ? (
+          {/* Hybrid Logo Section (Icon Image + Adaptive Theme HTML Text) */}
+          <Link href="/" className="flex items-center gap-2.5 group shrink-0" suppressHydrationWarning>
+            {!logoError && (
               <img
-                src={siteLogo}
+                src={siteLogo || "/logo.png"}
                 alt="ZeroLag TEK"
-                className="h-9 w-auto object-contain transition-transform group-hover:scale-105"
+                className="h-11 w-11 md:h-12 md:w-12 object-contain transition-transform duration-200 group-hover:scale-105 shrink-0"
                 onError={() => setLogoError(true)}
               />
-            ) : (
-              <div className="flex items-center gap-1.5 font-mono">
-                <span className="font-extrabold text-xl sm:text-2xl tracking-wider text-slate-900 dark:text-white">
-                  ZeroLag
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-lime-400/20 text-lime-600 dark:text-lime-400 border border-lime-500/30 font-bold">
-                  TEK
-                </span>
-              </div>
             )}
+            <div className="flex items-center gap-1.5 font-bold tracking-tight text-xl">
+              <span className="text-slate-900 dark:text-white transition-colors">
+                ZeroLag
+              </span>
+              <span className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs px-1.5 py-0.5 rounded border border-emerald-500/30 uppercase tracking-wider font-mono">
+                TEK
+              </span>
+            </div>
           </Link>
 
           {/* Search Bar with Instant Autocomplete Dropdown - Desktop */}
@@ -508,7 +507,7 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
             {/* Cart Button with Counter Badge */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative p-2 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-mono font-bold text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer"
+              className="relative p-2 sm:px-3.5 sm:py-2 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-mono font-bold text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all cursor-pointer"
               title="Shopping Cart"
             >
               <ShoppingBag className="w-4 h-4" />

@@ -189,7 +189,7 @@ export function ProductSpecsModal({ product, onClose }: { product: Product | nul
                     onClose();
                   }}
                   disabled={!product.inStock}
-                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.02] active:scale-95 transition-all"
+                  className="flex-1 py-3 px-4 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <ShoppingCart className="w-4 h-4" />
                   <span>Add to Cart</span>
