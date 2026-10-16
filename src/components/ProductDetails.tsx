@@ -15,6 +15,8 @@ import { AiAssistantDrawer } from '@/components/AiAssistantDrawer';
 import { ProductCard } from '@/components/ProductCard';
 import {
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   ShieldCheck,
   Truck,
   ShoppingCart,
@@ -54,6 +56,21 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
   const [quantity, setQuantity] = useState<number>(1);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(!initialProduct);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [showStickyBar, setShowStickyBar] = useState<boolean>(false);
+  const primaryCtaRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!primaryCtaRef.current) return;
+      const rect = primaryCtaRef.current.getBoundingClientRect();
+      setShowStickyBar(rect.bottom < 0);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [product]);
 
   // Reviews state
   const [approvedReviews, setApprovedReviews] = useState<ReviewItem[]>([]);
@@ -282,6 +299,8 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
   }
 
   const sellingPrice = Number(product.sellingPrice ?? product.priceLkr ?? product.price ?? 0);
+  const origPriceVal = Number(product.originalPriceLkr ?? product.originalPrice ?? product.original_price ?? 0);
+  const showDiscount = !isNaN(origPriceVal) && origPriceVal > 0 && origPriceVal > sellingPrice;
   const storeWhatsapp = process.env.NEXT_PUBLIC_STORE_WHATSAPP_NUMBER || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '94741117981';
   const whatsappMsg = `Hello ZeroLag Tek! I would like to order: ${product.name} (${formatPrice(sellingPrice)})`;
   const whatsappUrl = `https://wa.me/${storeWhatsapp}?text=${encodeURIComponent(whatsappMsg)}`;
@@ -479,9 +498,22 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
             {product.description && (
               <div className="space-y-1.5 pt-1">
                 <h4 className="text-xs font-mono font-bold text-lime-600 dark:text-lime-400 uppercase tracking-wider">Product Overview</h4>
-                <p className="text-xs sm:text-sm text-slate-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
-                  {product.description}
-                </p>
+                <div className={`relative transition-all duration-300 ${!isExpanded ? 'max-h-28 overflow-hidden' : ''}`}>
+                  <p className="text-xs sm:text-sm text-slate-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
+                    {product.description}
+                  </p>
+                  {!isExpanded && (
+                    <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white dark:from-zinc-900 to-transparent pointer-events-none" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-lime-600 dark:text-lime-400 font-semibold text-xs flex items-center gap-1 hover:underline cursor-pointer mt-1"
+                >
+                  <span>{isExpanded ? 'Show Less' : 'Read More'}</span>
+                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
               </div>
             )}
 
@@ -497,7 +529,7 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
             </div>
 
             {/* Actions: Quantity & Cart */}
-            <div className="space-y-4 pt-2">
+            <div ref={primaryCtaRef} className="space-y-4 pt-2">
               <div className="flex items-center gap-4">
                 <span className="text-xs font-mono text-slate-600 dark:text-zinc-400 uppercase font-semibold">Quantity:</span>
                 <div className="flex items-center bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-1 font-mono text-sm">
@@ -779,6 +811,67 @@ export function ProductDetails({ id, initialProduct = null }: ProductDetailsProp
       <CartDrawer onProceedToCheckout={() => setIsCheckoutOpen(true)} />
       <PayHereCheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} />
       <AiAssistantDrawer />
+
+      {/* Sticky Bottom Purchase Bar */}
+      {showStickyBar && product && (
+        <aside
+          aria-label="Quick purchase bar"
+          className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 p-3 shadow-2xl transition-all"
+        >
+          <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto flex items-center justify-between gap-3">
+            {/* Mini Image & Product Info */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-slate-50 dark:bg-zinc-950 p-1 shrink-0 overflow-hidden border border-slate-200 dark:border-zinc-800 flex items-center justify-center">
+                <img
+                  src={selectedImage || product.image || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&q=80&w=600'}
+                  alt={product.name}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate max-w-[150px] sm:max-w-xs md:max-w-md">
+                  {product.name}
+                </h4>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs sm:text-sm font-extrabold text-lime-600 dark:text-lime-400 font-mono whitespace-nowrap">
+                    {formatPrice(sellingPrice)}
+                  </span>
+                  {showDiscount && (
+                    <span className="text-[10px] sm:text-xs text-slate-400 dark:text-zinc-500 line-through font-mono whitespace-nowrap hidden sm:inline">
+                      {formatPrice(origPriceVal)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Immediate Action Buttons */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => addToCart(product)}
+                disabled={!product.inStock}
+                className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-md shadow-lime-400/20 active:scale-95 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">Add to Cart</span>
+                <span className="xs:hidden">Add</span>
+              </button>
+              <button
+                onClick={() => {
+                  addToCart(product);
+                  setIsCheckoutOpen(true);
+                }}
+                disabled={!product.inStock}
+                className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">Buy Now</span>
+                <span className="xs:hidden">Buy</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
     </div>
   );
 }
