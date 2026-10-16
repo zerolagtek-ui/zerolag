@@ -83,8 +83,10 @@ export const CATEGORIES: Category[] = [
 export const INITIAL_PRODUCTS: Product[] = [];
 
 export function formatPrice(priceLkr: number): string {
-  return `Rs. ${priceLkr.toLocaleString()}`;
+  return `LKR ${Number(priceLkr || 0).toLocaleString('en-US')}`;
 }
+
+export const formatCurrency = formatPrice;
 
 export function generateSlug(text?: string): string {
   if (!text) return '';

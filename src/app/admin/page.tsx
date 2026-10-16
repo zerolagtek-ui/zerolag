@@ -2481,7 +2481,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                       />
                     </div>
                     <div>
-                      <label className="text-zinc-400 block text-[10px] mb-1">Courier Rate (Rs.)</label>
+                      <label className="text-zinc-400 block text-[10px] mb-1">Courier Rate (LKR)</label>
                       <input
                         type="number"
                         value={rateOption.rate}
@@ -2749,7 +2749,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                   />
                 </div>
                 <div>
-                  <label className="text-zinc-400 block mb-1">Selling Price (Rs.) *</label>
+                  <label className="text-zinc-400 block mb-1">Selling Price (LKR) *</label>
                   <input
                     type="number"
                     required
@@ -2759,7 +2759,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                   />
                 </div>
                 <div>
-                  <label className="text-zinc-400 block mb-1">Original / Before Discount Price (Rs.) - (Optional)</label>
+                  <label className="text-zinc-400 block mb-1">Original / Before Discount Price (LKR) - (Optional)</label>
                   <input
                     type="number"
                     value={productForm.originalPriceLkr || ''}
@@ -3186,7 +3186,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"
                   >
                     <option value="percentage">Percentage (%)</option>
-                    <option value="fixed">Flat LKR (Rs.)</option>
+                    <option value="fixed">Flat LKR</option>
                   </select>
                 </div>
 
@@ -3197,7 +3197,7 @@ export default function AdminPage({ initialTab = 'products' }: { initialTab?: 'p
                     required
                     min={1}
                     max={promoDiscountType === 'percentage' ? 100 : undefined}
-                    placeholder={promoDiscountType === 'percentage' ? 'e.g. 10 (10%)' : 'e.g. 500 (Rs. 500)'}
+                    placeholder={promoDiscountType === 'percentage' ? 'e.g. 10 (10%)' : 'e.g. 500 (LKR 500)'}
                     value={promoDiscountValue}
                     onChange={(e) => setPromoDiscountValue(e.target.value !== '' ? Number(e.target.value) : '')}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-lime-400 focus:outline-none"

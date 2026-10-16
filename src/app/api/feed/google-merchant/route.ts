@@ -28,9 +28,11 @@ export async function GET() {
       const id = String(p.sku || p.id || p._id);
       const title = escapeXml(p.name || p.title || '');
       const description = escapeXml(p.description || p.name || p.title || '');
-      const link = `${baseUrl}/product/${p.slug || p.id || p._id}`;
+      const rawSlug = p.slug || (p.name ? p.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : '') || p.id || p._id;
+      const link = `${baseUrl}/product/${rawSlug}`;
       const imageLink = p.images?.[0] || p.image || '';
-      const price = `${Number(p.priceLkr || p.price || 0).toFixed(2)} LKR`;
+      const numPrice = Number(p.priceLkr || p.price || 0);
+      const price = `${Number.isInteger(numPrice) ? numPrice : numPrice.toFixed(2)} LKR`;
       const availability = ((p.stock ?? 1) > 0 || p.in_stock) ? 'in_stock' : 'out_of_stock';
       const brand = escapeXml(p.brand || 'ZeroLag Tek');
       const condition = 'new';

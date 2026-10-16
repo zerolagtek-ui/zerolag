@@ -9,6 +9,8 @@ export interface Product {
   priceUsd: number;
   originalPriceLkr?: number;
   price?: number;
+  sellingPrice?: number;
+  slug?: string;
   originalPrice?: number;
   original_price?: number;
   rating: number;

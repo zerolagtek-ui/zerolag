@@ -58,7 +58,7 @@ function HomeContent() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-black text-white overflow-x-hidden">
+    <div className="min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900 dark:bg-black dark:text-white transition-colors duration-200 overflow-x-hidden">
       {/* Navigation Header */}
       <Navbar
         searchQuery={searchQuery}
@@ -94,7 +94,7 @@ function HomeContent() {
 export default function Home() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex flex-col justify-between bg-black text-white overflow-x-hidden">
+      <div className="min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900 dark:bg-black dark:text-white transition-colors duration-200 overflow-x-hidden">
         <Navbar />
         <main className="flex-1">
           <HeroBanner />

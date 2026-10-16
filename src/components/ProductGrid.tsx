@@ -201,22 +201,22 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
   const activeNormCategory = normalizeCategory(selectedCategory);
 
   return (
-    <section id="products" className="py-12 bg-black text-white transition-colors">
+    <section id="products" className="py-12 bg-slate-50 text-slate-900 dark:bg-black dark:text-white transition-colors">
       <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-zinc-800 pb-6 gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-slate-200 dark:border-zinc-800 pb-6 gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 text-lime-400 font-mono text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="inline-flex items-center gap-2 text-lime-600 dark:text-lime-400 font-mono text-xs font-bold uppercase tracking-wider mb-2">
               <Cpu className="w-4 h-4" />
               <span>HARDWARE CATALOG</span>
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight text-white">
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               PERFORMANCE STOREFRONT
             </h2>
           </div>
 
-          <div className="flex items-center gap-3 text-xs font-mono text-zinc-400">
+          <div className="flex items-center gap-3 text-xs font-mono text-slate-500 dark:text-zinc-400">
             <span suppressHydrationWarning>
               {mounted && !isInitialLoading ? `Showing ${visibleProducts.length} of ${filteredProducts.length} items` : 'Loading items...'}
             </span>
@@ -224,13 +224,13 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         </div>
 
         {/* Dynamic Category Selector Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-800">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-zinc-800">
           <button
             onClick={() => handleCategoryClick('all')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all border whitespace-nowrap ${
               activeNormCategory === 'all'
                 ? 'bg-lime-400 text-slate-950 border-lime-400 shadow-md shadow-lime-400/20'
-                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
+                : 'bg-white text-slate-700 border-slate-200 hover:text-slate-950 hover:border-slate-300 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800 dark:hover:text-white dark:hover:border-zinc-700'
             }`}
           >
             <span suppressHydrationWarning>All Categories ({mounted ? products.length : 0})</span>
@@ -247,7 +247,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
                 className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all border whitespace-nowrap flex items-center gap-1.5 ${
                   isSelected
                     ? 'bg-lime-400 text-slate-950 border-lime-400 shadow-md shadow-lime-400/20'
-                    : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
+                    : 'bg-white text-slate-700 border-slate-200 hover:text-slate-950 hover:border-slate-300 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800 dark:hover:text-white dark:hover:border-zinc-700'
                 }`}
               >
                 <span>{cat.name}</span>
@@ -260,7 +260,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         </div>
 
         {/* Filter Controls Strip */}
-        <div className="p-3 sm:p-4 rounded-2xl bg-[#0a0c10] border border-zinc-800 flex flex-col sm:flex-row flex-wrap items-center justify-between gap-3 sm:gap-4 text-xs font-mono shadow-sm">
+        <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#0a0c10] border border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row flex-wrap items-center justify-between gap-3 sm:gap-4 text-xs font-mono shadow-sm">
           
           {/* Search Input */}
           <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
@@ -269,30 +269,30 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
               placeholder="Search products by title or brand..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-500 focus:border-lime-400 focus:outline-none"
+              className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:border-lime-500 focus:outline-none"
             />
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-slate-400 dark:text-zinc-400 absolute left-3 top-2.5" />
           </div>
 
           <div className="flex w-full sm:w-auto flex-wrap items-center gap-2 sm:gap-3 justify-between sm:justify-start">
             {/* In Stock Toggle */}
-            <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer bg-zinc-950 px-2.5 sm:px-3 py-2 rounded-xl border border-zinc-800 text-zinc-300 text-[11px] sm:text-xs">
+            <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer bg-slate-50 dark:bg-zinc-950 px-2.5 sm:px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 text-[11px] sm:text-xs">
               <input
                 type="checkbox"
                 checked={inStockOnly}
                 onChange={(e) => setInStockOnly(e.target.checked)}
-                className="accent-lime-400"
+                className="accent-lime-500"
               />
               <span>In-Stock Only</span>
             </label>
 
             {/* Sort Select */}
-            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 sm:px-3 py-2 rounded-xl border border-zinc-800 text-[11px] sm:text-xs">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-lime-400 shrink-0" />
+            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 sm:px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-[11px] sm:text-xs">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400 shrink-0" />
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-transparent text-[11px] sm:text-xs text-zinc-200 focus:outline-none"
+                className="bg-transparent text-[11px] sm:text-xs text-slate-800 dark:text-zinc-200 focus:outline-none"
               >
                 <option value="featured">Featured Hardware</option>
                 <option value="price-asc">Price: Low to High</option>
@@ -314,20 +314,20 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
             ))}
           </div>
         ) : (
-          <div className="p-12 text-center bg-[#0a0c10] border border-zinc-800 rounded-3xl space-y-4">
+          <div className="p-12 text-center bg-white dark:bg-[#0a0c10] border border-slate-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
             {products.length === 0 ? (
               <>
-                <PackageX className="w-12 h-12 text-zinc-600 mx-auto" />
-                <h3 className="text-lg font-bold text-white">No Products Available</h3>
-                <p className="text-xs text-zinc-400 font-mono">
+                <PackageX className="w-12 h-12 text-slate-400 dark:text-zinc-600 mx-auto" />
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">No Products Available</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono">
                   The store catalog is currently empty. Check back soon for new inventory!
                 </p>
               </>
             ) : searchQuery.trim() ? (
               <>
-                <Cpu className="w-12 h-12 text-zinc-600 mx-auto" />
-                <h3 className="text-lg font-bold text-white">No products found for "{searchQuery}"</h3>
-                <p className="text-xs text-zinc-400 font-mono">We couldn't find any hardware matching your search query.</p>
+                <Cpu className="w-12 h-12 text-slate-400 dark:text-zinc-600 mx-auto" />
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">No products found for "{searchQuery}"</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono">We couldn't find any hardware matching your search query.</p>
                 <button
                   onClick={() => {
                     setSearchQuery('');
@@ -340,9 +340,9 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
               </>
             ) : (
               <>
-                <Cpu className="w-12 h-12 text-zinc-600 mx-auto" />
-                <h3 className="text-lg font-bold text-white">No products found matching criteria</h3>
-                <p className="text-xs text-zinc-400 font-mono">Try adjusting your category filters or search query.</p>
+                <Cpu className="w-12 h-12 text-slate-400 dark:text-zinc-600 mx-auto" />
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">No products found matching criteria</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono">Try adjusting your category filters or search query.</p>
                 <button
                   onClick={() => {
                     setSelectedCategory('all');
@@ -362,7 +362,7 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
         {/* Infinite Scroll Sentinel & Load More Trigger */}
         <div ref={observerRef} className="pt-8 text-center space-y-4">
           {isLoadingMore && (
-            <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-lime-400 text-xs font-mono font-bold animate-pulse">
+            <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-lime-600 dark:text-lime-400 text-xs font-mono font-bold animate-pulse">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Loading Next Batch of Hardware...</span>
             </div>
@@ -371,15 +371,15 @@ export function ProductGrid({ externalSearchQuery, externalCategory, onSelectCat
           {hasMore && !isLoadingMore && (
             <button
               onClick={handleLoadMore}
-              className="px-8 py-3.5 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-lime-400 text-white font-mono font-bold text-xs hover:text-lime-400 transition-all shadow-lg hover:scale-105"
+              className="px-8 py-3.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-300 dark:border-zinc-700 hover:border-lime-500 text-slate-900 dark:text-white font-mono font-bold text-xs hover:text-lime-600 dark:hover:text-lime-400 transition-all shadow-md hover:scale-105"
             >
               LOAD MORE HARDWARE ({filteredProducts.length - displayedCount} REMAINING)
             </button>
           )}
 
           {!hasMore && filteredProducts.length > 0 && !isInitialLoading && (
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-500 text-xs font-mono">
-              <PackageCheck className="w-4 h-4 text-emerald-500" />
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-500 text-xs font-mono">
+              <PackageCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-500" />
               <span>You&apos;ve reached the end of the catalog ({filteredProducts.length} items)</span>
             </div>
           )}
