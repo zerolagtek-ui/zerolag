@@ -80,7 +80,7 @@ export function HeroSlider() {
                 <div className="w-44 h-12 bg-zinc-900 rounded-xl" />
               </div>
             </div>
-            <div className="lg:col-span-5 flex items-center justify-center relative w-full aspect-square sm:aspect-[4/3] lg:aspect-square max-w-md mx-auto rounded-2xl bg-zinc-900/40" />
+            <div className="lg:col-span-5 flex items-center justify-center relative w-full aspect-[4/3] md:aspect-square max-w-md mx-auto rounded-2xl bg-zinc-900/40" />
           </div>
         </div>
       </div>
@@ -190,21 +190,21 @@ export function HeroSlider() {
 
           {/* Right Image Column */}
           <div className="lg:col-span-5 flex items-center justify-center relative w-full h-[260px] sm:h-[320px] lg:h-full min-h-[300px] lg:min-h-[380px] z-10">
-            <div className="relative w-full max-w-md lg:max-w-lg 2xl:max-w-xl aspect-square sm:aspect-[4/3] lg:aspect-square h-full min-h-[260px] lg:min-h-[360px] flex items-center justify-center">
+            <div className="relative w-full max-w-md lg:max-w-lg 2xl:max-w-xl aspect-[4/3] md:aspect-square flex items-center justify-center">
               {!isImageBroken && slideImgSrc ? (
                 <Image
                   src={slideImgSrc}
                   alt={slideTitle}
                   fill
+                  priority
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   unoptimized
-                  className="object-contain drop-shadow-[0_20px_30px_rgba(0,0,0,0.8)] rounded-xl transition-all duration-500 hover:scale-105"
+                  className="object-contain p-4 drop-shadow-[0_20px_30px_rgba(0,0,0,0.8)] rounded-xl transition-all duration-500 hover:scale-105"
                   onError={() => {
                     if (currentSlide?.id) {
                       setImageErrors(prev => ({ ...prev, [currentSlide.id]: true }));
                     }
                   }}
-                  priority
                 />
               ) : (
                 <div className="w-full h-64 rounded-2xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-slate-900 border border-white/10 p-6 flex flex-col items-center justify-center text-center shadow-xl">

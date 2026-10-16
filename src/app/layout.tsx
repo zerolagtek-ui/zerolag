@@ -1,10 +1,17 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
 import { CartProvider } from '@/context/CartContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ScrollToTop } from '@/components/ScrollToTop';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  adjustFontFallback: true,
+});
 
 const PAYHERE_PRELOAD_URL =
   process.env.NEXT_PUBLIC_PAYHERE_JS_URL ||
@@ -48,7 +55,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
-      <body className="bg-slate-50 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen max-w-full overflow-x-hidden flex flex-col selection:bg-lime-400 selection:text-slate-950 pb-16 md:pb-0 transition-colors duration-200">
+      <body className={`${inter.className} bg-slate-50 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen max-w-full overflow-x-hidden flex flex-col selection:bg-lime-400 selection:text-slate-950 pb-16 md:pb-0 transition-colors duration-200`}>
         <Script
           id="payhere-sdk"
           src={PAYHERE_PRELOAD_URL}

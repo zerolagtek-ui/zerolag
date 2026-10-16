@@ -274,23 +274,25 @@ export function Navbar({ onSearchChange, searchQuery, onSelectCategory, selected
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-white/95 dark:bg-black/90 text-slate-900 dark:text-white border-b border-slate-200 dark:border-zinc-800 transition-colors shadow-sm">
       
       {/* Top Banner Notice & Direct WhatsApp CTA */}
-      <div className="bg-lime-400 text-[10px] sm:text-xs font-bold py-1 px-3 sm:px-4 text-black tracking-wider flex items-center justify-between w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-        <div className="hidden md:flex items-center gap-2 mx-auto uppercase truncate">
-          <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
-          <span className="truncate">ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
-          <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
-        </div>
+      <div className="h-[36px] w-full bg-lime-400 text-black flex items-center shrink-0">
+        <div className="flex items-center justify-between w-full max-w-full px-3 sm:px-4 text-[10px] sm:text-xs font-bold tracking-wider overflow-hidden text-ellipsis whitespace-nowrap">
+          <div className="hidden md:flex items-center gap-2 mx-auto uppercase truncate">
+            <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
+            <span className="truncate">ZEROLAG TEK: ISLANDWIDE EXPRESS DELIVERY | PAYHERE, PAYZY & COD AVAILABLE</span>
+            <Shield className="w-3.5 h-3.5 fill-current shrink-0" />
+          </div>
 
-        {/* WhatsApp Direct Header Link */}
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mx-auto md:mx-0 flex items-center gap-1 sm:gap-1.5 bg-slate-950 text-lime-400 px-2.5 sm:px-3 py-0.5 rounded-full font-mono text-[10px] sm:text-[11px] hover:bg-slate-900 border border-lime-400/40 transition-all font-bold truncate"
-        >
-          <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-lime-400 fill-lime-400/20 shrink-0" />
-          <span className="truncate">WhatsApp Order: +{storeWhatsapp}</span>
-        </a>
+          {/* WhatsApp Direct Header Link */}
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mx-auto md:mx-0 flex items-center gap-1 sm:gap-1.5 bg-slate-950 text-lime-400 px-2.5 sm:px-3 py-0.5 rounded-full font-mono text-[10px] sm:text-[11px] hover:bg-slate-900 border border-lime-400/40 transition-all font-bold truncate shrink-0"
+          >
+            <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-lime-400 fill-lime-400/20 shrink-0" />
+            <span className="truncate">WhatsApp Order: +{storeWhatsapp}</span>
+          </a>
+        </div>
       </div>
 
       {/* Main Header Container */}
